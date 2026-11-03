@@ -34,7 +34,7 @@ const RESULT_LABELS = {
 const buttonClass =
   "min-h-14 rounded-8 bg-blue-900 px-6 text-oln-16B-100 text-white hover:bg-blue-1000 hover:underline active:bg-blue-1000 focus-visible:focus-ring disabled:bg-solid-gray-300 disabled:text-solid-gray-800 disabled:no-underline";
 const fieldClass =
-  "w-full rounded-8 border border-solid-gray-600 bg-white p-4 text-std-16N-170 text-solid-gray-900 hover:border-black focus-visible:focus-ring";
+  "w-full rounded-8 border border-solid-gray-600 bg-white p-4 text-std-16N-170 text-solid-gray-900 placeholder:text-solid-gray-600 hover:border-black focus-visible:focus-ring";
 const labelClass = "text-std-16B-170 text-solid-gray-800";
 const panelClass = "rounded-12 border border-solid-gray-200 bg-white p-6";
 const secondaryClass =
@@ -67,8 +67,8 @@ function WarningBox({
   onRewrite: () => void;
 }) {
   return (
-    <div role="alert" className="flex flex-col gap-3 rounded-8 border-2 border-warning-yellow-1 bg-white p-4">
-      <p className="text-std-16B-170">
+    <div className="flex flex-col gap-3 rounded-8 border-2 border-warning-yellow-1 bg-white p-4">
+      <p role="alert" className="text-std-16B-170">
         {warning.kinds.join("、")}のような情報が含まれているようです。
       </p>
       <p className="text-std-16N-170">
@@ -618,7 +618,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         )}
       </div>
 
-      <section className="flex flex-col gap-6" aria-label="問診とベンダーの返事">
+      <section className="flex flex-col gap-6 print:hidden" aria-label="問診とベンダーの返事">
         {error && (
           <p
             ref={errorRef}
@@ -943,8 +943,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               <tbody>
                 {card.viewpoints.map((viewpoint) => (
                   <tr key={viewpoint.id} className="border-b border-solid-gray-200 align-top">
-                    <th scope="row" className="py-2 pr-3 font-normal whitespace-nowrap">{viewpoint.name}</th>
-                    <td className="py-2 pr-3 whitespace-nowrap">{STATUS_LABELS[viewpoint.status]}</td>
+                    <th scope="row" className="py-2 pr-3 font-normal">{viewpoint.name}</th>
+                    <td className="py-2 pr-3">{STATUS_LABELS[viewpoint.status]}</td>
                     <td className="py-2">{reasons[viewpoint.id] ?? "―"}</td>
                   </tr>
                 ))}
@@ -1142,7 +1142,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       </section>
 
       <aside
-        className={`flex flex-col gap-4 self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto ${panelClass}`}
+        className={`flex flex-col gap-4 self-start print:hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto ${panelClass}`}
         aria-label="判定カード"
       >
         <p className="rounded-8 bg-solid-gray-50 px-3 py-2 text-std-16B-170 text-solid-gray-800">

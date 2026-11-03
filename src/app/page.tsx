@@ -8,7 +8,7 @@ export default function Home() {
   const item = getItem(DEFAULT_ITEM_ID)!;
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8">
-      <header className="flex flex-col gap-2">
+      <header className="flex flex-col gap-2 print:hidden">
         <p className="text-std-16N-170 text-solid-gray-800">
           中小病院の事務職員のための点検アシスタント
         </p>
@@ -37,7 +37,7 @@ export default function Home() {
         }
       />
 
-      <footer className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4 text-dns-14N-130 text-solid-gray-800">
+      <footer className="flex flex-col gap-2 print:hidden border-t border-solid-gray-200 pt-4 text-dns-14N-130 text-solid-gray-800">
         <p>
           出典：厚生労働省の次の資料をもとに作成しました（公共データ利用規約 第1.0版）。根拠の文は原文の引用で、質問、判定の基準、次の一手、言い換えは本アプリが加工したものです。これらの内容は、アプリのコードのライセンス（MIT License）とは別に扱います。
         </p>

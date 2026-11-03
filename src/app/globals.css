@@ -19,23 +19,15 @@
   box-shadow: 0 0 0 2px var(--color-yellow-300);
 }
 
-/* 印刷では説明用の1枚だけを出す */
+/* 印刷では説明用の1枚だけを出す。画面の部品は print:hidden で消し、高さが残って白紙が続かないようにする */
 @media print {
   @page {
     size: A4;
     margin: 15mm;
   }
-  body * {
-    visibility: hidden;
-  }
-  #print-sheet,
-  #print-sheet * {
-    visibility: visible;
-  }
-  #print-sheet {
-    position: absolute;
-    inset: 0 auto auto 0;
-    width: 100%;
+  main {
+    padding: 0;
+    gap: 0;
   }
 }
 
