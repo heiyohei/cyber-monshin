@@ -29,3 +29,12 @@ export function attachReadings(history: readonly HistoryEntry[], readings: reado
   const last = history[history.length - 1];
   return [...history.slice(0, -1), { ...last, readings: [...readings] }];
 }
+
+// 「続ける」で届いた読み取りは、直前の回答についてのものなので、最後の回の読み取りに足す（置き換えない）。
+// 同じ観点はあとの方に置き換える。控えがなければ何もしない
+export function addReadings(history: readonly HistoryEntry[], readings: readonly HistoryReading[]): HistoryEntry[] {
+  if (history.length === 0) return [];
+  const last = history[history.length - 1];
+  const merged = readings.reduce(upsertReading, last.readings ?? []);
+  return [...history.slice(0, -1), { ...last, readings: merged }];
+}

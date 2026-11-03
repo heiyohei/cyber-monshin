@@ -9,7 +9,14 @@ import { PrintSheet } from "./print-sheet";
 import { TermText } from "./term-text";
 import { buildCard, statusLabel, vendorMessage, type Card } from "@/lib/card";
 import { CONCERN_TEXTS, readAllItems, type ItemReading } from "@/lib/checklist-excel";
-import { appendHistory, attachReadings, upsertReading, type HistoryEntry, type HistoryReading } from "@/lib/history";
+import {
+  addReadings,
+  appendHistory,
+  attachReadings,
+  upsertReading,
+  type HistoryEntry,
+  type HistoryReading,
+} from "@/lib/history";
 import { initialStates, type ViewpointStatus } from "@/lib/verdict";
 import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
@@ -461,14 +468,18 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         }
       }
       if (!received && !failed) showError("処理が途中で止まりました。もう一度ボタンを押してください。");
-      // 署名つきの状態が届いたら、この回の読み取り（直前の回答から読み取ったことと同じ内容）を控えに付ける
-      if (received && pending) setHistory((current) => attachReadings(current, readings));
       return received;
     } catch {
       showError(CONNECTION_ERROR);
       return false;
     } finally {
-      if (!received) {
+      if (received) {
+        // 署名つきの状態が届いたら、この回の読み取り（直前の回答から読み取ったことと同じ内容）を控えに付ける。
+        // 届いたあとに通信が切れても「読み取っています」のままにならないよう、ここで付ける。
+        // 「続ける」の回（回答がない）に届く読み取りは直前の回答についてのものなので、最後の回に足す
+        if (pending) setHistory((current) => attachReadings(current, readings));
+        else if (readings.length > 0) setHistory((current) => addReadings(current, readings));
+      } else {
         setQuestion(before.question);
         setCard(before.card);
         setReasons(before.reasons);
@@ -1355,7 +1366,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                       <details className="text-solid-gray-800">
                         <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">AI に送る内容</summary>
                         <p className="mt-2 rounded-8 bg-white p-4">
-                          上の縮めた写真と、今の質問、確かめる対策の名前と確かめたいことを送ります。これまでの回答、病院名、読み込んだファイルは送りません。送った写真はこのサイトに保存しません。回答を送るときは、これまでの質問と回答も一緒に送ります。
+                          上の縮めた写真と、今の質問、確かめる対策の名前と確かめたいことを送ります。これまでの質問と回答、病院名、読み込んだファイルは送りません。送った写真はこのサイトに保存しません。回答を送るときは、これまでの質問と回答も一緒に送ります。
                         </p>
                       </details>
                       <div className="flex flex-wrap gap-2">
@@ -1477,10 +1488,6 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           </form>
         )}
 
-        {/* 自分の答えを見返せるよう、いまの質問の下に残す。読み取りを待つ間（回答の欄が消えている間）も出す。
-            保存ファイルから再開したときは控えがないので出ない */}
-        {session && !finished && history.length > 0 && <InterviewHistory entries={history} card={card} open />}
-
         {question && !busy && (
           <form onSubmit={submitTerm} className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
             <h2 className="text-std-18B-160 text-solid-gray-900">ことばの相談</h2>
@@ -1533,6 +1540,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           </form>
         )}
 
+        {/* 自分の答えを見返せるよう、いまの質問の下に残す。一覧は長くなるので、ことばの相談の欄より下に置く（欄が遠くならないように）。
+            読み取りを待つ間（回答の欄が消えている間）も出す。保存ファイルから再開したときは控えがないので出ない */}
+        {session && !finished && history.length > 0 && <InterviewHistory entries={history} card={card} open />}
+
         {note && <p className="whitespace-pre-wrap text-std-16N-170">{note}</p>}
 
         {finished && (
@@ -1561,9 +1572,6 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
             </table>
           </section>
         )}
-
-        {/* まとめのあとも、たたんだ状態で残す（この画面の中だけ。保存ファイルには入らない） */}
-        {finished && history.length > 0 && <InterviewHistory entries={history} card={card} open={false} />}
 
         {finished && (
           <section className={`flex flex-col gap-4 ${panelClass}`} aria-label="診療が止まるおそれがあるところと次にすること">
@@ -1605,6 +1613,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           </section>
         )}
 
+        {/* まとめのあとも、たたんだ状態で残す（この画面の中だけ。保存ファイルには入らない）。
+            まとめと「次にすること」を先に読めるよう、その下に置く */}
+        {finished && history.length > 0 && <InterviewHistory entries={history} card={card} open={false} />}
+
         {finished && (
           <section className={`flex flex-col gap-4 ${panelClass}`} aria-labelledby="flow-heading">
             <h2 id="flow-heading" className="text-std-24B-150 text-solid-gray-900">
@@ -1642,7 +1654,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               </div>
               <p className="text-std-16N-170 text-solid-gray-800">
                 保存するファイルは、このアプリにもう一度読み込んで、ベンダーの返事の確認から続けるためのものです。Excel や Word
-                では開けません。人に見せるときは「説明用の1枚を印刷する」を使ってください。ファイルには病院の弱いところの情報が入るので、院外に持ち出さないでください。病院名は入りません。
+                では開けません。人に見せるときは「説明用の1枚を印刷する」を使ってください。ファイルには病院の弱いところの情報が入るので、院外に持ち出さないでください。病院名と、これまでの質問と回答の文は入りません。
               </p>
             </div>
 

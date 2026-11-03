@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appendHistory, attachReadings, upsertReading, type HistoryEntry } from "./history.ts";
+import { addReadings, appendHistory, attachReadings, upsertReading, type HistoryEntry } from "./history.ts";
 
 const QUESTION = { text: "控えから戻す確認をしたことはありますか？", why: "控えがあっても、戻せなければ診療が止まるためです" };
 
@@ -36,6 +36,24 @@ test("読み取りを付ける：0件でも「届いた」と分かるように�
   const attached = attachReadings(appendHistory([], QUESTION, "はい"), []);
   assert.deepEqual(attached[0].readings, []);
   assert.deepEqual(attachReadings([], [{ viewpointId: "restore", status: "unknown", reason: "" }]), []);
+});
+
+test("「続ける」で届いた読み取り：最後の回の読み取りに足し、同じ観点はあとの方に置き換える", () => {
+  const history = attachReadings(appendHistory([], QUESTION, "はい"), [
+    { viewpointId: "acquire", status: "confirmed", reason: "毎日取っている" },
+    { viewpointId: "restore", status: "unknown", reason: "分からない" },
+  ]);
+  const added = addReadings(history, [
+    { viewpointId: "restore", status: "confirmed", reason: "去年試した" },
+    { viewpointId: "isolate", status: "denied", reason: "つながったまま" },
+  ]);
+  assert.deepEqual(
+    added[0].readings?.map((reading) => `${reading.viewpointId}:${reading.status}`),
+    ["acquire:confirmed", "restore:confirmed", "isolate:denied"],
+  );
+  // まだ読み取りが届いていない回（null）にも足せる。控えがなければ何もしない
+  assert.equal(addReadings(appendHistory([], QUESTION, "はい"), [{ viewpointId: "acquire", status: "confirmed", reason: "" }])[0].readings?.length, 1);
+  assert.deepEqual(addReadings([], [{ viewpointId: "acquire", status: "confirmed", reason: "" }]), []);
 });
 
 test("読み取りを足す：同じ観点が2回届いたら、あとの方に置き換える", () => {

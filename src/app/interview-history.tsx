@@ -2,8 +2,8 @@ import { statusLabel, type Card } from "@/lib/card";
 import type { HistoryEntry } from "@/lib/history";
 
 // これまでの質問と回答。自分の答えを見返し、話の流れをたどるための一覧。
-// ブラウザの中だけで持ち、サーバーへは送らず、保存ファイルにも、印刷用の1枚にも入れない。
-// 文の中の用語は押せるようにしない。回答欄とことばの相談の間に置くので、Tab で止まる所を増やさないため
+// この画面の中だけで持ち、保存ファイルにも、印刷用の1枚にも入れない（AI には、問診の続きとして質問と回答を送っている）。
+// 文の中の用語は押せるようにしない。長い一覧になるので、Tab で止まる所を増やさないため
 export function InterviewHistory({ entries, card, open }: { entries: HistoryEntry[]; card: Card; open: boolean }) {
   const nameOf = (viewpointId: string) =>
     card.viewpoints.find((viewpoint) => viewpoint.id === viewpointId)?.name ?? viewpointId;
@@ -13,9 +13,13 @@ export function InterviewHistory({ entries, card, open }: { entries: HistoryEntr
       <summary className="cursor-pointer text-std-16B-170 text-blue-900 underline focus-visible:focus-ring">
         これまでの質問と回答（{entries.length}件）
       </summary>
+      <p className="mt-2 text-std-16N-170 text-solid-gray-800">
+        この一覧は、この画面にだけ残ります。保存するファイルにも、印刷する1枚にも入りません。画面を閉じると消えます。
+      </p>
       <ol className="mt-3 flex list-decimal flex-col gap-3 pl-6 text-std-16N-170">
         {entries.map((entry, index) => (
-          <li key={index} className="rounded-8 bg-solid-gray-50 p-3">
+          // 空白のない長い英数字（URL など）で横にはみ出さないよう、どこでも折り返せるようにする
+          <li key={index} className="wrap-anywhere rounded-8 bg-solid-gray-50 p-3">
             <dl className="flex flex-col gap-1">
               <dt className="text-std-16B-170">質問</dt>
               <dd>
@@ -29,7 +33,7 @@ export function InterviewHistory({ entries, card, open }: { entries: HistoryEntr
                 {entry.readings === null ? (
                   "読み取っています"
                 ) : entry.readings.length === 0 ? (
-                  "この回答からは、読み取ったことがありませんでした。"
+                  "この回答から読み取れたことは、ありませんでした。"
                 ) : (
                   <ul className="flex flex-col gap-1">
                     {entry.readings.map((reading) => (
