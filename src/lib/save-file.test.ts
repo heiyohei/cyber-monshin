@@ -30,6 +30,30 @@ test("保存：形式の版番号が入り、会話の履歴は入らない", ()
   assert.equal(file.items[0].reasons.restore, "わからないとの回答");
 });
 
+// 画面の「これまでの質問と回答」はブラウザの中だけで持つ。保存ファイルには、質問の文も回答の文も入らない（形式は版1のまま）
+test("保存：これまでの質問と回答は入らない", () => {
+  const session = finishedSession();
+  session.messages = [
+    { role: "assistant", content: "控えから戻す確認をしたことはありますか？" },
+    { role: "user", content: "はい、去年の春に試しました" },
+  ];
+  const file = buildSaveFile(session, { restore: "戻す確認をしたとの回答でした" }, "要約");
+  const text = JSON.stringify(file);
+  assert.equal(text.includes("控えから戻す確認をしたことはありますか"), false);
+  assert.equal(text.includes("去年の春に試しました"), false);
+  assert.equal(text.includes("history"), false);
+  assert.deepEqual(Object.keys(file.items[0]).sort(), [
+    "itemId",
+    "lastYearAnswer",
+    "reasons",
+    "sources",
+    "states",
+    "summary",
+    "vendorAnswer",
+    "vendorQuestions",
+  ]);
+});
+
 test("保存と読み込み：状態と確認事項が戻り、終わった問診として返事を検証できる", () => {
   const file = JSON.parse(JSON.stringify(buildSaveFile(finishedSession(), {}, "要約")));
   const loaded = sessionFromSaveFile(file);
