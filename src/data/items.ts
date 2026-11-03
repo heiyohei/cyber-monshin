@@ -3,10 +3,10 @@ import type { FocusItem, PlannedItem } from "./types.ts";
 import { UPDATE_ITEM } from "./update.ts";
 
 // 利用者が選べる重点項目。並びは攻撃の流れ（入られる→広がる→戻せない→止まる）
-export const ITEMS: readonly FocusItem[] = [BACKUP_ITEM];
+export const ITEMS: readonly FocusItem[] = [UPDATE_ITEM, BACKUP_ITEM];
 
 // まだ作っていない重点項目。データはあっても、承認の前は選べない
-export const DRAFT_ITEMS: readonly FocusItem[] = [UPDATE_ITEM];
+export const DRAFT_ITEMS: readonly FocusItem[] = [];
 
 export const PLANNED_ITEMS: readonly PlannedItem[] = [
   { id: "devices", name: "機器と外部接続の把握", stage: "入られる", checkItems: ["2-①", "2-②", "2-⑭"] },
