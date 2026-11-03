@@ -95,7 +95,7 @@ function SentContent({ label, text }: { label: string; text: string }) {
           {label}：{text || "（まだ入力されていません）"}
         </p>
         <p>
-          ほかに、これまでの質問と回答、観点の状態を送ります。病院名、読み込んだファイル、Excel の中身は送りません。送った内容はこのサイトに保存しません。
+          ほかに、これまでの質問と回答、確かめたことの結果を送ります。病院名、読み込んだファイル、Excel の中身は送りません。送った内容はこのサイトに保存しません。
         </p>
       </div>
     </details>
@@ -824,6 +824,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         {question && !busy && (
           <h2 ref={questionRef} tabIndex={-1} className="text-std-20B-150 text-solid-gray-900 focus-visible:focus-ring">
             質問に答える
+            <span className="ml-3 text-std-16N-170 text-solid-gray-800">
+              確かめた観点 {card.viewpoints.filter((viewpoint) => viewpoint.status !== "not_asked").length}/
+              {card.viewpoints.length}
+            </span>
           </h2>
         )}
 
@@ -931,8 +935,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
             <table className="w-full border-collapse text-left text-std-16N-170">
               <thead>
                 <tr className="border-b-2 border-solid-gray-420">
-                  <th scope="col" className="py-2 pr-3 text-std-16B-170">観点</th>
-                  <th scope="col" className="py-2 pr-3 text-std-16B-170">状態</th>
+                  <th scope="col" className="py-2 pr-3 text-std-16B-170">確かめたこと</th>
+                  <th scope="col" className="py-2 pr-3 text-std-16B-170">結果</th>
                   <th scope="col" className="py-2 text-std-16B-170">分かったこと</th>
                 </tr>
               </thead>
@@ -954,7 +958,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
             <h2 className="text-std-24B-150 text-solid-gray-900">このままだと診療が止まるおそれがあるところ</h2>
             {card.result.holeCount === 0 ? (
               <p className="text-std-16N-170">
-                今回確認した観点では穴は見つかりませんでした。対策の準拠を保証するものではありません。
+                今回確かめた範囲では、診療が止まるおそれがあるところは見つかりませんでした。対策が基準を満たしていると保証するものではありません。
               </p>
             ) : (
               <>
@@ -967,7 +971,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 </ol>
                 {card.result.holeCount > card.result.holes.length && (
                   <p className="text-std-16N-170 text-solid-gray-800">
-                    ほかに{card.result.holeCount - card.result.holes.length}件の穴があります。
+                    ほかに{card.result.holeCount - card.result.holes.length}件あります。
                   </p>
                 )}
                 <h3 className="text-std-20B-150 text-solid-gray-900">次にすること</h3>
@@ -1137,7 +1141,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         )}
       </section>
 
-      <aside className={`flex flex-col gap-4 self-start ${panelClass}`} aria-label="判定">
+      <aside
+        className={`flex flex-col gap-4 self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto ${panelClass}`}
+        aria-label="判定カード"
+      >
         <p className="rounded-8 bg-solid-gray-50 px-3 py-2 text-std-16B-170 text-solid-gray-800">
           判定カード：回答から読み取った内容で、自動で更新されます
         </p>
@@ -1175,7 +1182,16 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 {viewpoint.name}：{STATUS_LABELS[viewpoint.status]}
               </p>
               {reasons[viewpoint.id] && <p>{reasons[viewpoint.id]}</p>}
-              {viewpoint.status !== "not_asked" && <EvidenceText evidence={viewpoint.evidence} />}
+              {viewpoint.status !== "not_asked" && (
+                // 根拠は長いので、直前に更新した観点だけ開く。ほかは観点の行が一目で見えるようにたたむ
+                <details
+                  key={`${viewpoint.id}-${recent.some((item) => item.viewpointId === viewpoint.id)}`}
+                  open={recent.some((item) => item.viewpointId === viewpoint.id)}
+                >
+                  <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">根拠を見る</summary>
+                  <EvidenceText evidence={viewpoint.evidence} />
+                </details>
+              )}
             </li>
           ))}
         </ul>

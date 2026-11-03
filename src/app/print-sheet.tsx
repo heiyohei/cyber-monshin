@@ -28,7 +28,7 @@ export function PrintSheet({ card }: { card: Card }) {
 
       <h2 className="mt-4 text-[12pt] font-bold">このままだと診療が止まるおそれがあるところ</h2>
       {card.result.holeCount === 0 ? (
-        <p>今回確認した観点では穴は見つかりませんでした。対策の準拠を保証するものではありません。</p>
+        <p>今回確かめた範囲では、診療が止まるおそれがあるところは見つかりませんでした。対策が基準を満たしていると保証するものではありません。</p>
       ) : (
         <ol className="list-decimal pl-6">
           {card.result.holes.map((hole) => (
@@ -68,7 +68,7 @@ export function PrintSheet({ card }: { card: Card }) {
       <h2 className="mt-4 text-[12pt] font-bold">この点検の位置づけ</h2>
       <ul className="list-disc pl-6">
         <li>事務の担当者の回答とベンダーの返事に基づく自己点検です。実地の確認ではありません。</li>
-        <li>対策の準拠を保証するものではなく、法的な判断もしていません。</li>
+        <li>対策が基準を満たしていると保証するものではなく、法的な判断もしていません。</li>
         <li>{card.itemName}だけを確かめたもので、すべての対策を確かめたものではありません。</li>
         <li>
           根拠は厚生労働省の公開資料（チェックリスト、同マニュアル 令和8年度版、医療情報システムの安全管理に関するガイドライン
