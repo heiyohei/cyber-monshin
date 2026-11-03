@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "node --experimental-strip-types --no-warnings --test \"src/**/*.test.ts\"",
     "eval": "node --experimental-strip-types --no-warnings --env-file-if-exists=.env eval/run.ts",
+    "eval:terms": "node --experimental-strip-types --no-warnings --env-file-if-exists=.env eval/terms.ts",
     "check:safety": "node scripts/check-public-safety.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
     "typecheck": "next typegen && tsc --noEmit"

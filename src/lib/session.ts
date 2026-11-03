@@ -34,6 +34,7 @@ export type InterviewSession = {
   pendingResults: Anthropic.Beta.BetaToolResultBlockParam[];
   vendorQuestions: VendorQuestion[];
   finished: boolean;
+  termCount?: number;
 };
 
 export type SealedSession = { payload: string; signature: string };

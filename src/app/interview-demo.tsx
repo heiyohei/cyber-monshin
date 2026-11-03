@@ -45,7 +45,8 @@ const STEP_GROUPS = [
   { key: "budget", title: "予算が必要なこと（次のシステム更改などで検討）" },
 ] as const;
 
-type PersonalInfoWarning = { target: "answer" | "reply"; kinds: string[] };
+type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[] };
+type TermExchange = { question: string; answer: string };
 
 function WarningBox({
   warning,
@@ -117,6 +118,10 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [error, setError] = useState("");
   const [canContinue, setCanContinue] = useState(false);
   const [warning, setWarning] = useState<PersonalInfoWarning | null>(null);
+  const [termInput, setTermInput] = useState("");
+  const [terms, setTerms] = useState<TermExchange[]>([]);
+  const [termRemaining, setTermRemaining] = useState<number | null>(null);
+  const [termBusy, setTermBusy] = useState(false);
   const [excel, setExcel] = useState<ExcelReading | null>(null);
   const [excelAnswer, setExcelAnswer] = useState<LastYearAnswer>("unknown");
   const [needsCode, setNeedsCode] = useState(false);
@@ -301,6 +306,41 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   function sendAnyway() {
     if (warning?.target === "answer") void sendAnswer(true);
     if (warning?.target === "reply") void sendReply(true);
+    if (warning?.target === "term") void sendTerm(true);
+  }
+
+  // ことばの相談。判定には使わず、問診の流れとも分けて持つ
+  async function sendTerm(checked: boolean) {
+    if (!session || !termInput.trim()) return;
+    if (!checked && needsPersonalInfoCheck(termInput, "term")) return;
+    setWarning(null);
+    setTermBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/ask-term", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session, question: termInput }),
+      });
+      if (!response.ok) {
+        await failFrom(response);
+        return;
+      }
+      const data = await response.json();
+      setTerms((current) => [...current, { question: termInput, answer: data.answer }]);
+      setTermRemaining(data.remaining);
+      setSession(data.session);
+      setTermInput("");
+    } catch {
+      setError("接続できませんでした。やり直してください。");
+    } finally {
+      setTermBusy(false);
+    }
+  }
+
+  async function submitTerm(event: FormEvent) {
+    event.preventDefault();
+    await sendTerm(false);
   }
 
   async function submitCode(event: FormEvent) {
@@ -508,19 +548,82 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
               <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
             )}
             <SentContent label="回答" text={answer} />
-            <button type="submit" disabled={!answer.trim()} className={buttonClass}>
+            <button type="submit" disabled={!answer.trim() || termBusy} className={buttonClass}>
               回答する
+            </button>
+          </form>
+        )}
+
+        {question && !busy && (
+          <form onSubmit={submitTerm} className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
+            <h2 className="text-std-18B-160 text-solid-gray-900">ことばの相談</h2>
+            <p className="text-std-16N-170 text-solid-gray-800">
+              質問の中に分からない言葉があれば聞いてください。判定には使いません。
+              {termRemaining !== null && `（あと${termRemaining}回）`}
+            </p>
+            {terms.length > 0 && (
+              <dl className="flex flex-col gap-2 text-std-16N-170">
+                {terms.map((item, index) => (
+                  <div key={index} className="rounded-8 bg-white p-3">
+                    <dt className="text-std-16B-170">{item.question}</dt>
+                    <dd className="mt-1 whitespace-pre-wrap">{item.answer}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            <label htmlFor="term" className={labelClass}>
+              聞きたいこと（500文字まで）
+            </label>
+            <input
+              id="term"
+              type="text"
+              maxLength={500}
+              value={termInput}
+              placeholder="例：「バックアップ」とは何ですか？"
+              onChange={(event) => {
+                setTermInput(event.target.value);
+                if (warning?.target === "term") setWarning(null);
+              }}
+              className={fieldClass}
+            />
+            {warning?.target === "term" && (
+              <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
+            )}
+            <button
+              type="submit"
+              disabled={!termInput.trim() || termBusy || termRemaining === 0}
+              className={secondaryClass}
+            >
+              {termBusy ? "調べています…" : "聞く"}
             </button>
           </form>
         )}
 
         {note && <p className="whitespace-pre-wrap text-std-16N-170">{note}</p>}
 
-        {finished && summary && (
-          <div className={`flex flex-col gap-2 ${panelClass}`}>
+        {finished && (
+          <section className={`flex flex-col gap-3 ${panelClass}`} aria-label="問診のまとめ">
             <h2 className="text-std-24B-150 text-solid-gray-900">問診のまとめ</h2>
-            <p className="whitespace-pre-wrap text-std-16N-170">{summary}</p>
-          </div>
+            {summary && <p className="text-std-16N-170">{summary}</p>}
+            <table className="w-full border-collapse text-left text-std-16N-170">
+              <thead>
+                <tr className="border-b-2 border-solid-gray-420">
+                  <th scope="col" className="py-2 pr-3 text-std-16B-170">観点</th>
+                  <th scope="col" className="py-2 pr-3 text-std-16B-170">状態</th>
+                  <th scope="col" className="py-2 text-std-16B-170">分かったこと</th>
+                </tr>
+              </thead>
+              <tbody>
+                {card.viewpoints.map((viewpoint) => (
+                  <tr key={viewpoint.id} className="border-b border-solid-gray-200 align-top">
+                    <th scope="row" className="py-2 pr-3 font-normal whitespace-nowrap">{viewpoint.name}</th>
+                    <td className="py-2 pr-3 whitespace-nowrap">{STATUS_LABELS[viewpoint.status]}</td>
+                    <td className="py-2">{reasons[viewpoint.id] ?? "―"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
         )}
 
         {finished && (
