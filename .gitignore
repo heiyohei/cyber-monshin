@@ -170,3 +170,6 @@ samples/
 # 手元だけに置くレビューと案
 docs/review-*.md
 docs/ideas-*.md
+
+# Claude Code の worktree（サブエージェントの作業用）
+.claude/worktrees/
