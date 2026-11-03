@@ -54,9 +54,9 @@ export const DEVICES_ITEM = {
       impactRank: 1,
       hole: "ベンダーが外から点検や修理をしている機器を、病院が知りません。知らないうちに、外から入れる道が残っているおそれがあります。",
       nextSteps: {
-        free: "保守の契約書や作業報告に、外から点検している機器が書かれているかを確かめます。",
-        vendor: "外から点検している機器と、そのつなぎ方を、一覧にして渡してもらいます。",
-        budget: "使っていない外からの道を閉じる作業や、道を1つにまとめる工事を考えます。",
+        free: { id: "devices.remote.free", text: "保守の契約書や作業報告に、外から点検している機器が書かれているかを確かめます。" },
+        vendor: { id: "devices.remote.vendor", text: "外から点検している機器と、そのつなぎ方を、一覧にして渡してもらいます。" },
+        budget: { id: "devices.remote.budget", text: "使っていない外からの道を閉じる作業や、道を1つにまとめる工事を考えます。" },
       },
     },
     {
@@ -71,9 +71,9 @@ export const DEVICES_ITEM = {
       impactRank: 2,
       hole: "誰の機器でも病院のネットワークにつなげます。つないだ機器から、病院のネットワークに入り込まれるおそれがあります。",
       nextSteps: {
-        free: "院内の Wi-Fi のパスワードを、誰でも見える場所に貼っていないかを確かめます。",
-        vendor: "ネットワークにつなげる機器を、決まったものだけに限る設定をしているかを聞きます。",
-        budget: "つなげる機器を限る設定ができる機械への入れ替えを、次にシステムを入れ替えるときに考えます。",
+        free: { id: "devices.source_limit.free", text: "院内の Wi-Fi のパスワードを、誰でも見える場所に貼っていないかを確かめます。" },
+        vendor: { id: "devices.source_limit.vendor", text: "ネットワークにつなげる機器を、決まったものだけに限る設定をしているかを聞きます。" },
+        budget: { id: "devices.source_limit.budget", text: "つなげる機器を限る設定ができる機械への入れ替えを、次にシステムを入れ替えるときに考えます。" },
       },
     },
     {
@@ -88,9 +88,9 @@ export const DEVICES_ITEM = {
       impactRank: 3,
       hole: "院内の機器の一覧がありません。守るべき機器や古い機器を見落とすおそれがあります。",
       nextSteps: {
-        free: "購入の記録や保守の契約書をもとに、機器の一覧を作り始めます。",
-        vendor: "ベンダーが持っている機器の一覧を、病院にも渡してもらいます。",
-        budget: "機器の一覧を自動で集める仕組みを、次にシステムを入れ替えるときに考えます。",
+        free: { id: "devices.ledger.free", text: "購入の記録や保守の契約書をもとに、機器の一覧を作り始めます。" },
+        vendor: { id: "devices.ledger.vendor", text: "ベンダーが持っている機器の一覧を、病院にも渡してもらいます。" },
+        budget: { id: "devices.ledger.budget", text: "機器の一覧を自動で集める仕組みを、次にシステムを入れ替えるときに考えます。" },
       },
     },
     {
@@ -105,9 +105,9 @@ export const DEVICES_ITEM = {
       impactRank: 4,
       hole: "部署ごとに業者が入れた機器や回線があり、誰も管理していない外への道が残っているおそれがあります。",
       nextSteps: {
-        free: "部署ごとに、独自に契約した機器や回線がないかを聞いて回ります。",
-        vendor: "点検や修理のための回線を、病院の決まった回線にまとめられるかを聞きます。",
-        budget: "点検や修理のための回線をまとめる工事を、次にシステムを入れ替えるときに考えます。",
+        free: { id: "devices.entry_points.free", text: "部署ごとに、独自に契約した機器や回線がないかを聞いて回ります。" },
+        vendor: { id: "devices.entry_points.vendor", text: "点検や修理のための回線を、病院の決まった回線にまとめられるかを聞きます。" },
+        budget: { id: "devices.entry_points.budget", text: "点検や修理のための回線をまとめる工事を、次にシステムを入れ替えるときに考えます。" },
       },
     },
   ],

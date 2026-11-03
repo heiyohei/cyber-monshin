@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { stepIdsOf } from "../lib/result.ts";
 import { computeVerdict } from "../lib/verdict.ts";
 import { ITEMS } from "./items.ts";
 
@@ -8,6 +9,12 @@ test("重点項目：5つすべてを選べる", () => {
     ITEMS.map((item) => item.id),
     ["devices", "update", "accounts", "backup", "continuity"],
   );
+});
+
+test("重点項目：次の一手の ID は、5つの項目をまたいでも重複しない", () => {
+  const ids = ITEMS.flatMap((item) => stepIdsOf(item));
+  assert.equal(ids.length, 60);
+  assert.equal(new Set(ids).size, ids.length, "次の一手の ID が項目をまたいで重複している");
 });
 
 for (const item of ITEMS) {
@@ -27,9 +34,20 @@ for (const item of ITEMS) {
     assert.equal(options.at(-1), "わからない");
 
     for (const viewpoint of item.viewpoints) {
-      assert.ok(viewpoint.nextSteps.free && viewpoint.nextSteps.vendor && viewpoint.nextSteps.budget, viewpoint.id);
+      assert.ok(
+        viewpoint.nextSteps.free.text && viewpoint.nextSteps.vendor.text && viewpoint.nextSteps.budget.text,
+        viewpoint.id,
+      );
     }
     for (const checkItem of item.checkItems) assert.ok(checkItem.keywords.length > 0, checkItem.no);
+  });
+
+  // 次の一手の ID は保存ファイルの「やった」印に使う。項目の中で重複せず、項目の ID で始まる（ほかの項目と混ざらない）
+  test(`重点項目（${item.name}）：次の一手の ID が重複せず、項目の ID で始まる`, () => {
+    const ids = stepIdsOf(item);
+    assert.equal(ids.length, item.viewpoints.length * 3);
+    assert.equal(new Set(ids).size, ids.length, "次の一手の ID が重複している");
+    for (const id of ids) assert.ok(id.startsWith(`${item.id}.`), id);
   });
 
   test(`重点項目（${item.name}）：最も重い観点が否定なら「いいえ」、すべて確認済みなら「回答で確認」`, () => {

@@ -54,7 +54,7 @@ export function PrintSheet({ card }: { card: Card }) {
               <p className="font-bold">{group.title}</p>
               <ul className="list-disc pl-6">
                 {card.result.nextSteps[group.key].map((step) => (
-                  <li key={step}>{step}</li>
+                  <li key={step.id}>{step.text}</li>
                 ))}
               </ul>
             </div>

@@ -1,5 +1,8 @@
 export type Evidence = { id: string; text: string; source: string };
-export type NextSteps = { free: string; vendor: string; budget: string };
+// 次の一手。id は保存ファイルの「やった」印に使うので、項目を足したり並べ替えたりしても変えない
+// （「項目.観点.分類」の形。文を直しても id は変えない）
+export type NextStep = { id: string; text: string };
+export type NextSteps = { free: NextStep; vendor: NextStep; budget: NextStep };
 
 export type ViewpointDef = {
   id: string;

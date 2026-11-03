@@ -43,9 +43,9 @@ export const UPDATE_ITEM = {
       impactRank: 1,
       hole: "パソコンやサーバーに、セキュリティの更新が入っていません。古いままの弱いところから攻撃されるおそれがあります。",
       nextSteps: {
-        free: "更新を入れた記録が、ベンダーの作業報告などで届いているかを確かめます。",
-        vendor: "どの機器に、どのくらいの間隔で更新を入れているかを聞きます。",
-        budget: "更新を決まった間隔で入れる作業を、保守の契約に入れることを考えます。",
+        free: { id: "update.apply.free", text: "更新を入れた記録が、ベンダーの作業報告などで届いているかを確かめます。" },
+        vendor: { id: "update.apply.vendor", text: "どの機器に、どのくらいの間隔で更新を入れているかを聞きます。" },
+        budget: { id: "update.apply.budget", text: "更新を決まった間隔で入れる作業を、保守の契約に入れることを考えます。" },
       },
     },
     {
@@ -60,9 +60,9 @@ export const UPDATE_ITEM = {
       impactRank: 2,
       hole: "ベンダーの契約に入っていない機器があり、その更新を誰も行っていないおそれがあります。",
       nextSteps: {
-        free: "保守の契約書で、更新の作業が契約に入っているかを確かめます。",
-        vendor: "契約に入っていない機器はどれか、その更新は誰が行うかを聞きます。",
-        budget: "契約に入っていない機器の更新を、保守の契約に加えることを考えます。",
+        free: { id: "update.responsibility.free", text: "保守の契約書で、更新の作業が契約に入っているかを確かめます。" },
+        vendor: { id: "update.responsibility.vendor", text: "契約に入っていない機器はどれか、その更新は誰が行うかを聞きます。" },
+        budget: { id: "update.responsibility.budget", text: "契約に入っていない機器の更新を、保守の契約に加えることを考えます。" },
       },
     },
     {
@@ -77,9 +77,9 @@ export const UPDATE_ITEM = {
       impactRank: 3,
       hole: "メーカーのサポートが終わり、もう更新が出ない古い機器が残っているおそれがあります。",
       nextSteps: {
-        free: "院内の機器の一覧があるか、古い機器が残っていないかを確かめます。",
-        vendor: "サポートが終わった機器やソフトがないかを聞きます。",
-        budget: "サポートが終わった機器の入れ替えを、次にシステムを入れ替えるときに考えます。",
+        free: { id: "update.inventory.free", text: "院内の機器の一覧があるか、古い機器が残っていないかを確かめます。" },
+        vendor: { id: "update.inventory.vendor", text: "サポートが終わった機器やソフトがないかを聞きます。" },
+        budget: { id: "update.inventory.budget", text: "サポートが終わった機器の入れ替えを、次にシステムを入れ替えるときに考えます。" },
       },
     },
     {
@@ -94,9 +94,9 @@ export const UPDATE_ITEM = {
       impactRank: 4,
       hole: "更新のあとに動作を確かめていません。更新が原因の不具合で、診療が止まるおそれがあります。",
       nextSteps: {
-        free: "更新のあとに不具合がなかったかを、作業報告で確かめます。",
-        vendor: "更新のあとに、システムが正しく動くかを確かめているかを聞きます。",
-        budget: "影響の小さい機器から順に更新する手順や、試しに更新してみる環境を考えます。",
+        free: { id: "update.verify.free", text: "更新のあとに不具合がなかったかを、作業報告で確かめます。" },
+        vendor: { id: "update.verify.vendor", text: "更新のあとに、システムが正しく動くかを確かめているかを聞きます。" },
+        budget: { id: "update.verify.budget", text: "影響の小さい機器から順に更新する手順や、試しに更新してみる環境を考えます。" },
       },
     },
   ],

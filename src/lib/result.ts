@@ -1,15 +1,39 @@
-import type { FocusItem, ViewpointDef } from "../data/types.ts";
+import type { FocusItem, NextStep, ViewpointDef } from "../data/types.ts";
 import type { ViewpointStates, ViewpointStatus } from "./verdict.ts";
 
 export type Hole = { viewpointId: string; name: string; status: ViewpointStatus; text: string };
 
+// 次の一手の分類。画面と説明用の1枚では、この順に出す
+export const STEP_GROUP_KEYS = ["free", "vendor", "budget"] as const;
+export type StepGroupKey = (typeof STEP_GROUP_KEYS)[number];
+export type NextStepGroups = Record<StepGroupKey, NextStep[]>;
+
 export type Result = {
   holes: Hole[];
   holeCount: number;
-  nextSteps: { free: string[]; vendor: string[]; budget: string[] };
+  nextSteps: NextStepGroups;
 };
 
 const TOP = 3;
+
+// 項目の次の一手の ID。保存ファイルの「やった」印が、この項目のものかを照らすのに使う
+export function stepIdsOf(item: FocusItem): string[] {
+  return item.viewpoints.flatMap((viewpoint) => STEP_GROUP_KEYS.map((key) => viewpoint.nextSteps[key].id));
+}
+
+// 「やった」印のない次の一手。画面の「残っていること n件」と、説明用の1枚の「引き継ぐこと」で使う
+export function remainingSteps(steps: NextStepGroups, done: readonly string[]): NextStepGroups {
+  const marked = new Set(done);
+  return {
+    free: steps.free.filter((step) => !marked.has(step.id)),
+    vendor: steps.vendor.filter((step) => !marked.has(step.id)),
+    budget: steps.budget.filter((step) => !marked.has(step.id)),
+  };
+}
+
+export function countSteps(steps: NextStepGroups): number {
+  return steps.free.length + steps.vendor.length + steps.budget.length;
+}
 
 // 穴の文は「できていない」ときの言い方で書いてある。「わからない」ときは言い切らず、
 // 確かめたいことと、起きうることだけを示す（事務職員役の試用で「分からないと答えたのに言い切られた」と出たため）

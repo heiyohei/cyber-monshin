@@ -1600,7 +1600,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                     <p className="text-std-16B-170">{group.title}</p>
                     <ul className="list-disc pl-6 text-std-16N-170">
                       {card.result.nextSteps[group.key].map((step) => (
-                        <li key={step}>{step}</li>
+                        <li key={step.id}>{step.text}</li>
                       ))}
                     </ul>
                   </div>

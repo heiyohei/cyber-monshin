@@ -64,9 +64,9 @@ export const ACCOUNTS_ITEM = {
       impactRank: 1,
       hole: "設定を変えられる強い権限を持つ人が多くいます。1人のIDが乗っ取られると、被害が院内全体に広がるおそれがあります。",
       nextSteps: {
-        free: "強い権限を持っている人の名前を、一覧に書き出します。",
-        vendor: "強い権限を持つIDの一覧をもらい、減らせるかどうかを聞きます。",
-        budget: "強い権限がなくても使えるシステムへの切り替えを、次にシステムを入れ替えるときに考えます。",
+        free: { id: "accounts.admin.free", text: "強い権限を持っている人の名前を、一覧に書き出します。" },
+        vendor: { id: "accounts.admin.vendor", text: "強い権限を持つIDの一覧をもらい、減らせるかどうかを聞きます。" },
+        budget: { id: "accounts.admin.budget", text: "強い権限がなくても使えるシステムへの切り替えを、次にシステムを入れ替えるときに考えます。" },
       },
     },
     {
@@ -81,9 +81,9 @@ export const ACCOUNTS_ITEM = {
       impactRank: 2,
       hole: "同じパスワードを、いくつものシステムで使っています。1つ漏れると、多くの機器に入られるおそれがあります。",
       nextSteps: {
-        free: "システムごとに違うパスワードを使うよう、職員に呼びかけます。",
-        vendor: "院内のサーバーや機器、ほかの病院と同じパスワードを使っていないかを聞きます。",
-        budget: "パスワードを安全に管理する仕組みや、使い回しを防ぐ設定を考えます。",
+        free: { id: "accounts.reuse.free", text: "システムごとに違うパスワードを使うよう、職員に呼びかけます。" },
+        vendor: { id: "accounts.reuse.vendor", text: "院内のサーバーや機器、ほかの病院と同じパスワードを使っていないかを聞きます。" },
+        budget: { id: "accounts.reuse.budget", text: "パスワードを安全に管理する仕組みや、使い回しを防ぐ設定を考えます。" },
       },
     },
     {
@@ -98,9 +98,9 @@ export const ACCOUNTS_ITEM = {
       impactRank: 3,
       hole: "辞めた人や使っていない人のログイン用のIDが残っています。ログイン用のIDが残っていると、悪用されるおそれがあります。",
       nextSteps: {
-        free: "退職者の名簿とログイン用のIDの一覧を見比べ、残っているものを探します。",
-        vendor: "使っていないIDの止め方と、その作業を頼めるかを聞きます。",
-        budget: "人の出入りに合わせてIDを自動で止める仕組みを、次にシステムを入れ替えるときに考えます。",
+        free: { id: "accounts.cleanup.free", text: "退職者の名簿とログイン用のIDの一覧を見比べ、残っているものを探します。" },
+        vendor: { id: "accounts.cleanup.vendor", text: "使っていないIDの止め方と、その作業を頼めるかを聞きます。" },
+        budget: { id: "accounts.cleanup.budget", text: "人の出入りに合わせてIDを自動で止める仕組みを、次にシステムを入れ替えるときに考えます。" },
       },
     },
     {
@@ -115,9 +115,9 @@ export const ACCOUNTS_ITEM = {
       impactRank: 4,
       hole: "パスワードだけでログインできます。パスワードが漏れると、すぐに入られるおそれがあります。",
       nextSteps: {
-        free: "次にシステムを入れ替える時期と、そのときICカードなどでの本人確認を入れる予定があるかを、院内で確かめます。",
-        vendor: "パソコンとサーバーで、ICカードなどでの本人確認を使えるかを聞きます。",
-        budget: "ICカードや指紋での本人確認を、次にシステムを入れ替えるときに入れることを考えます。",
+        free: { id: "accounts.two_factor.free", text: "次にシステムを入れ替える時期と、そのときICカードなどでの本人確認を入れる予定があるかを、院内で確かめます。" },
+        vendor: { id: "accounts.two_factor.vendor", text: "パソコンとサーバーで、ICカードなどでの本人確認を使えるかを聞きます。" },
+        budget: { id: "accounts.two_factor.budget", text: "ICカードや指紋での本人確認を、次にシステムを入れ替えるときに入れることを考えます。" },
       },
     },
   ],

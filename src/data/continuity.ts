@@ -48,9 +48,9 @@ export const CONTINUITY_ITEM = {
       impactRank: 1,
       hole: "攻撃でシステムが止まったときに、どう診療を続けるかが決まっていません。診療が長く止まるおそれがあります。",
       nextSteps: {
-        free: "地震や停電のときの計画があれば、攻撃でシステムが止まったときにも使えるかを読み直します。",
-        vendor: "システムが止まったときに、紙で診療を続けるために必要な情報は何かを聞きます。",
-        budget: "攻撃に備えた計画づくりを、外部の専門家に手伝ってもらうことを考えます。",
+        free: { id: "continuity.plan.free", text: "地震や停電のときの計画があれば、攻撃でシステムが止まったときにも使えるかを読み直します。" },
+        vendor: { id: "continuity.plan.vendor", text: "システムが止まったときに、紙で診療を続けるために必要な情報は何かを聞きます。" },
+        budget: { id: "continuity.plan.budget", text: "攻撃に備えた計画づくりを、外部の専門家に手伝ってもらうことを考えます。" },
       },
     },
     {
@@ -65,9 +65,9 @@ export const CONTINUITY_ITEM = {
       impactRank: 2,
       hole: "攻撃に気づいたとき、誰にどの順番で知らせるかが決まっていません。対応が遅れて、被害が広がるおそれがあります。",
       nextSteps: {
-        free: "院内の担当者、ベンダー、厚生労働省、警察の連絡先を、1枚の図にまとめます。",
-        vendor: "攻撃が疑われるときに、夜間や休日でもつながるベンダーの連絡先を聞きます。",
-        budget: "相談できる外部の専門家と、前もって契約しておくことを考えます。",
+        free: { id: "continuity.contacts.free", text: "院内の担当者、ベンダー、厚生労働省、警察の連絡先を、1枚の図にまとめます。" },
+        vendor: { id: "continuity.contacts.vendor", text: "攻撃が疑われるときに、夜間や休日でもつながるベンダーの連絡先を聞きます。" },
+        budget: { id: "continuity.contacts.budget", text: "相談できる外部の専門家と、前もって契約しておくことを考えます。" },
       },
     },
     {
@@ -82,9 +82,9 @@ export const CONTINUITY_ITEM = {
       impactRank: 3,
       hole: "計画はあっても、その通りに動けるかを試していません。いざというときに動けないおそれがあります。",
       nextSteps: {
-        free: "連絡の図を使って、関係者に順番に連絡してみる短い練習をします。",
-        vendor: "システムが止まったときの練習に、ベンダーも参加してもらえるかを聞きます。",
-        budget: "紙での診療に切り替える練習を、外部の手伝いを受けて行うことを考えます。",
+        free: { id: "continuity.drill.free", text: "連絡の図を使って、関係者に順番に連絡してみる短い練習をします。" },
+        vendor: { id: "continuity.drill.vendor", text: "システムが止まったときの練習に、ベンダーも参加してもらえるかを聞きます。" },
+        budget: { id: "continuity.drill.budget", text: "紙での診療に切り替える練習を、外部の手伝いを受けて行うことを考えます。" },
       },
     },
     {
@@ -99,9 +99,9 @@ export const CONTINUITY_ITEM = {
       impactRank: 4,
       hole: "ベンダー自身が攻撃を受けたときの備えを確かめていません。ベンダーが止まると、病院の点検や修理も止まるおそれがあります。",
       nextSteps: {
-        free: "ベンダーから届いた事業者用のチェックリストで、チェック項目 3-③（攻撃に備えた計画）の答えを確かめます。",
-        vendor: "ベンダーが攻撃を受けたときに、病院への点検や修理をどう続けるかを聞きます。",
-        budget: "ベンダーが止まったときの代わりの手段を、保守の契約に入れることを考えます。",
+        free: { id: "continuity.vendor_bcp.free", text: "ベンダーから届いた事業者用のチェックリストで、チェック項目 3-③（攻撃に備えた計画）の答えを確かめます。" },
+        vendor: { id: "continuity.vendor_bcp.vendor", text: "ベンダーが攻撃を受けたときに、病院への点検や修理をどう続けるかを聞きます。" },
+        budget: { id: "continuity.vendor_bcp.budget", text: "ベンダーが止まったときの代わりの手段を、保守の契約に入れることを考えます。" },
       },
     },
   ],
