@@ -162,3 +162,4 @@ next-env.d.ts
 docs/plan.md
 .claude/launch.json
 docs/demo-script.md
+eval/runs/

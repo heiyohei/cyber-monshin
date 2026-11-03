@@ -1,6 +1,6 @@
 // 問診と返事の検証を台本で動かして測る。費用がかかる。
 // 使い方：npm run eval -- --note "変更内容" [--case id] [--repeat 3]
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { emptyUsage, type Usage } from "../src/lib/claude.ts";
 import { viewpointResult } from "../src/lib/quote.ts";
@@ -16,6 +16,7 @@ const COST_LIMIT = 10;
 const CONCURRENCY = 3;
 const MAX_ROUNDS = 8;
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
+const RUNS_DIR = `eval/runs/${new Date().toISOString().replace(/[:.]/g, "-")}`;
 
 const KEYWORDS: Record<ViewpointId, RegExp> = {
   procedure: /手順|文書|マニュアル|決まって/,
@@ -35,12 +36,19 @@ function cost(usage: Usage): number {
 }
 
 // 質問の順番は Claude が決めるので、質問文の言葉から台本の回答を選ぶ
-function pickAnswer(text: string, remaining: ViewpointId[], testCase: EvalCase): string {
+function pickAnswer(text: string, remaining: ViewpointId[], testCase: EvalCase): { id: string; answer: string } {
   const id = remaining.find((item) => KEYWORDS[item].test(text)) ?? remaining[0];
-  if (!id) return "それ以上のことは分かりません。";
+  if (!id) return { id: "なし", answer: "それ以上のことは分かりません。" };
   remaining.splice(remaining.indexOf(id), 1);
-  return testCase.answers[id];
+  return { id, answer: testCase.answers[id] };
 }
+
+// 原因を調べられるよう、1回ごとのやりとりを手元に残す（eval/runs/ は公開しない）
+type TranscriptEntry =
+  | { type: "question"; text: string; picked: string; answer: string }
+  | { type: "report"; viewpointId: string; status: string; reason: string }
+  | { type: "vendor"; requirements: { id: string; viewpointId: string; text: string }[]; results: unknown[] }
+  | { type: "event"; text: string };
 
 type RunResult = {
   caseId: string;
@@ -57,6 +65,7 @@ type RunResult = {
   error?: string;
   usage: Usage;
   ms: number;
+  transcript: TranscriptEntry[];
 };
 
 async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
@@ -76,7 +85,9 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
     fakeQuotes: 0,
     usage,
     ms: 0,
+    transcript: [],
   };
+  const log = result.transcript;
 
   try {
     let answer: string | undefined;
@@ -86,10 +97,22 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
       const emit = (event: InterviewEvent) => {
         if (event.type === "question") question = event.text;
         if (event.type === "can_continue") continuing = true;
+        if (event.type === "viewpoint_updated") {
+          log.push({ type: "report", viewpointId: event.viewpointId, status: event.status, reason: event.reason });
+        }
+        if (event.type === "message" || event.type === "error") {
+          log.push({ type: "event", text: event.type === "message" ? event.text : event.message });
+        }
       };
       await runInterview(session, answer, emit, AbortSignal.timeout(180_000), usage);
       if (!question && !continuing) break;
-      answer = continuing ? undefined : pickAnswer(question, remaining, testCase);
+      if (continuing) {
+        answer = undefined;
+        continue;
+      }
+      const picked = pickAnswer(question, remaining, testCase);
+      log.push({ type: "question", text: question, picked: picked.id, answer: picked.answer });
+      answer = picked.answer;
     }
 
     result.states = session.states;
@@ -107,6 +130,11 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
         AbortSignal.timeout(180_000),
         usage,
       );
+      log.push({
+        type: "vendor",
+        requirements: request.requirements.map(({ id, viewpointId, text }) => ({ id, viewpointId, text })),
+        results,
+      });
       // 観点ごとにまとめた結果で比べる。要件の数は Claude が決めるため
       for (const [viewpoint, expected] of Object.entries(testCase.vendor.results)) {
         const actual = viewpointResult(viewpoint as ViewpointId, request.requirements, results);
@@ -120,6 +148,8 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
     result.error = error instanceof InterviewStop ? error.message : error instanceof Error ? error.name : "unknown";
   }
   result.ms = Date.now() - startedAt;
+  mkdirSync(RUNS_DIR, { recursive: true });
+  writeFileSync(`${RUNS_DIR}/${testCase.id}-${repeat}.json`, JSON.stringify(result, null, 2));
   return result;
 }
 
