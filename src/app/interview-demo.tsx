@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { SAMPLE_HOSPITAL } from "@/data/sample";
 import type { Card } from "@/lib/card";
 import type { InterviewEvent } from "@/lib/interview";
 import type { ReadResult } from "@/lib/quote";
-import type { SealedSession } from "@/lib/session";
+import type { SealedSession, VendorRequest } from "@/lib/session";
 
 type Question = { text: string; why: string; options: string[] };
 type ServerEvent = InterviewEvent | { type: "session"; session: SealedSession };
@@ -30,21 +31,17 @@ const fieldClass =
 const labelClass = "text-std-16B-170 text-solid-gray-800";
 const panelClass = "rounded-12 border border-solid-gray-200 bg-white p-6";
 
-export function InterviewDemo({
-  initialCard,
-  vendorQuestion,
-  requirements,
-}: {
-  initialCard: Card;
-  vendorQuestion: string;
-  requirements: { id: string; viewpointId: string; text: string }[];
-}) {
+export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [card, setCard] = useState(initialCard);
   const [session, setSession] = useState<SealedSession | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
   const [answer, setAnswer] = useState("");
   const [note, setNote] = useState("");
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [finished, setFinished] = useState(false);
+  const [summary, setSummary] = useState("");
+  const [vendor, setVendor] = useState<VendorRequest | null>(null);
+  const [copied, setCopied] = useState(false);
   const [reply, setReply] = useState("");
   const [results, setResults] = useState<ReadResult[]>([]);
   const [busy, setBusy] = useState(false);
@@ -57,6 +54,12 @@ export function InterviewDemo({
     if (event.type === "question") setQuestion(event);
     if (event.type === "message") setNote(event.text);
     if (event.type === "can_continue") setCanContinue(true);
+    if (event.type === "item_finished") {
+      setFinished(true);
+      setSummary(event.summary);
+      setVendor(event.vendor);
+      setNote("");
+    }
     if (event.type === "error") setError(event.message);
     if (event.type === "session") setSession(event.session);
     if (event.type === "verdict_updated") setCard(event.card);
@@ -125,7 +128,16 @@ export function InterviewDemo({
   }
 
   function start() {
-    return sendInterview({ last_year_answer: "yes", vendor_answer: "no_item" });
+    return sendInterview({
+      last_year_answer: SAMPLE_HOSPITAL.lastYearAnswer,
+      vendor_answer: SAMPLE_HOSPITAL.vendorAnswer,
+    });
+  }
+
+  async function copyQuestion() {
+    if (!vendor) return;
+    await navigator.clipboard.writeText(vendor.question);
+    setCopied(true);
   }
 
   async function submitAnswer(event: FormEvent) {
@@ -172,7 +184,7 @@ export function InterviewDemo({
       setReasons((current) => {
         const next = { ...current };
         for (const result of checked) {
-          const viewpointId = requirements.find((item) => item.id === result.requirement_id)?.viewpointId;
+          const viewpointId = vendor?.requirements.find((item) => item.id === result.requirement_id)?.viewpointId;
           if (viewpointId && (result.result === "met" || result.result === "not_met")) {
             next[viewpointId] = result.plain;
           }
@@ -215,9 +227,19 @@ export function InterviewDemo({
         )}
 
         {!session && !busy && (
-          <button type="button" onClick={start} className={buttonClass}>
-            問診を始める
-          </button>
+          <div className={`flex flex-col gap-3 ${panelClass}`}>
+            <h2 className="text-std-24B-150 text-solid-gray-900">サンプルで試す</h2>
+            <p className="text-std-16N-170">
+              {SAMPLE_HOSPITAL.name}の担当者になったつもりで、質問に答えてみてください。
+              {SAMPLE_HOSPITAL.description}
+            </p>
+            <p className="text-std-16N-170 text-solid-gray-800">
+              実際の病院の情報は入れないでください。回答はこの画面を閉じると消えます。
+            </p>
+            <button type="button" onClick={start} className={buttonClass}>
+              サンプルで試す
+            </button>
+          </div>
         )}
 
         {busy && (
@@ -271,10 +293,31 @@ export function InterviewDemo({
 
         {note && <p className="whitespace-pre-wrap text-std-16N-170">{note}</p>}
 
-        {session && (
+        {finished && summary && (
+          <div className={`flex flex-col gap-2 ${panelClass}`}>
+            <h2 className="text-std-24B-150 text-solid-gray-900">問診のまとめ</h2>
+            <p className="whitespace-pre-wrap text-std-16N-170">{summary}</p>
+          </div>
+        )}
+
+        {finished && !vendor && (
+          <p className="text-std-16N-170">
+            今回確認した観点では穴は見つかりませんでした。対策の準拠を保証するものではありません。
+          </p>
+        )}
+
+        {vendor && (
           <form onSubmit={submitReply} className="flex flex-col gap-3 border-t border-solid-gray-200 pt-6">
-            <h2 className="text-std-24B-150 text-solid-gray-900">ベンダーの返事を確かめる</h2>
-            <p className="text-std-16N-170">確認事項（サンプル）：{vendorQuestion}</p>
+            <h2 className="text-std-24B-150 text-solid-gray-900">ベンダーに確かめる</h2>
+            <p className="text-std-16N-170">次の文章をベンダーへ送り、届いた返事を下に貼り付けてください。</p>
+            <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">{vendor.question}</p>
+            <button
+              type="button"
+              onClick={copyQuestion}
+              className="min-h-11 w-fit rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring"
+            >
+              {copied ? "コピーしました" : "質問文をコピーする"}
+            </button>
             <label htmlFor="reply" className={labelClass}>
               返事（4,000文字まで。病院名、担当者名、IP アドレスは消してください）
             </label>
@@ -297,7 +340,7 @@ export function InterviewDemo({
             {results.map((result) => (
               <li key={result.requirement_id} className={panelClass}>
                 <p className="text-std-18B-160">
-                  {requirements.find((item) => item.id === result.requirement_id)?.text}：
+                  {vendor?.requirements.find((item) => item.id === result.requirement_id)?.text}：
                   {RESULT_LABELS[result.result]}
                 </p>
                 {result.quote && (

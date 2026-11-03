@@ -1,4 +1,4 @@
-import { SAMPLE_VENDOR_QUESTION } from "@/data/backup";
+import { SAMPLE_HOSPITAL } from "@/data/sample";
 import { buildCard } from "@/lib/card";
 import { initialStates } from "@/lib/verdict";
 import { InterviewDemo } from "./interview-demo";
@@ -24,14 +24,10 @@ export default function Home() {
         <li>厚生労働省の公式ツールではありません。</li>
         <li>すべての対策を確かめるものではありません。今回はバックアップと復旧だけを確かめます。ほかの項目は今後の拡張です。</li>
         <li>患者情報は入力しないでください。回答はこのサイトに保存しませんが、処理のため AI の Claude を提供する Anthropic 社へ送ります。</li>
-        <li>開発中の確認用の画面です。根拠は仮の文面です。</li>
+        <li>黒戸記念病院と黒戸町は架空です。開発中の画面で、根拠は仮の文面です。</li>
       </ul>
 
-      <InterviewDemo
-        initialCard={buildCard(initialStates(), "yes")}
-        vendorQuestion={SAMPLE_VENDOR_QUESTION.question}
-        requirements={SAMPLE_VENDOR_QUESTION.requirements}
-      />
+      <InterviewDemo initialCard={buildCard(initialStates(), SAMPLE_HOSPITAL.lastYearAnswer)} />
 
       <footer className="border-t border-solid-gray-200 pt-4 text-dns-14N-130 text-solid-gray-800">
         画面は、デジタル庁デザインシステムのデザイントークン（MIT License）を使って作成しました。デジタル庁が作成、提供するものではありません。
