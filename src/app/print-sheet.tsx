@@ -42,7 +42,7 @@ export function PrintSheet({ card, done = [], vendor = null }: { card: Card; don
   const pendingShown = pending.slice(0, HANDOVER_QUESTIONS_SHOWN);
 
   return (
-    <section id="print-sheet" className="hidden text-[10pt] leading-[1.5] text-black print:block">
+    <section id="print-sheet" className="hidden text-[10pt] leading-[1.5] text-black print:col-span-full print:block">
       <h1 className="text-[16pt] font-bold">サイバー対策の点検結果（{card.itemName}）</h1>
       <p className="mt-2">
         病院名：＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿　点検日：＿＿＿＿年＿＿月＿＿日
