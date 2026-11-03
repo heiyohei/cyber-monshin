@@ -5,6 +5,7 @@ import { getItem, ITEMS, PLANNED_ITEMS } from "@/data/items";
 import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
 import type { Evidence, FocusItem } from "@/data/types";
 import { PrintSheet } from "./print-sheet";
+import { TermText } from "./term-text";
 import { buildCard, statusLabel, vendorMessage, type Card } from "@/lib/card";
 import { CONCERN_TEXTS, readAllItems, type ItemReading } from "@/lib/checklist-excel";
 import { initialStates, type ViewpointStatus } from "@/lib/verdict";
@@ -143,10 +144,11 @@ function SentContent({ label, text }: { label: string; text: string }) {
   );
 }
 
-function EvidenceText({ evidence }: { evidence: Evidence }) {
+// 根拠は厚生労働省の資料の原文。文字は変えず、用語に押すと説明が出る印だけを付ける
+function EvidenceText({ evidence, onAskMore }: { evidence: Evidence; onAskMore?: (term: string) => void }) {
   return (
     <p className="mt-1 text-std-16N-170 text-solid-gray-800">
-      根拠：「{evidence.text}」（{evidence.source}）
+      <TermText prefix="根拠：「" text={evidence.text} suffix={`」（${evidence.source}）`} onAskMore={onAskMore} />
     </p>
   );
 }
@@ -250,6 +252,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [recent, setRecent] = useState<RecentReading[]>([]);
   const [verdictChange, setVerdictChange] = useState<string | null>(null);
   const [termInput, setTermInput] = useState("");
+  const termInputRef = useRef<HTMLInputElement>(null);
   const [terms, setTerms] = useState<TermExchange[]>([]);
   const [termRemaining, setTermRemaining] = useState<number | null>(null);
   const [termBusy, setTermBusy] = useState(false);
@@ -656,6 +659,16 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     event.preventDefault();
     await sendTerm(false);
   }
+
+  // 用語の短い説明の「もっと詳しく聞く」。問診の途中（ことばの相談の欄があるとき）だけ渡し、欄に用語を入れて焦点を移す
+  const askMore =
+    question && !busy
+      ? (term: string) => {
+          setTermInput(`「${term}」について、もう少し詳しく教えてください。`);
+          if (warning?.target === "term") setWarning(null);
+          termInputRef.current?.focus();
+        }
+      : undefined;
 
   function showImageNotice(text: string) {
     setImageNotice((current) => ({ seq: (current?.seq ?? 0) + 1, text }));
@@ -1218,9 +1231,11 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
 
         {question && !busy && (
           <form onSubmit={submitAnswer} className="flex flex-col gap-3">
-            <p className="text-std-20B-150 text-solid-gray-900">{question.text}</p>
+            <p className="text-std-20B-150 text-solid-gray-900">
+              <TermText text={question.text} onAskMore={askMore} />
+            </p>
             <p className="rounded-8 bg-blue-50 p-4 text-std-16N-170 text-solid-gray-800">
-              なぜこの質問？ {question.why}
+              <TermText prefix="なぜこの質問？ " text={question.why} onAskMore={askMore} />
             </p>
             {question.options.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -1435,7 +1450,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           <form onSubmit={submitTerm} className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
             <h2 className="text-std-18B-160 text-solid-gray-900">ことばの相談</h2>
             <p className="text-std-16N-170 text-solid-gray-800">
-              質問の中に分からない言葉があれば聞いてください。判定には使いません。
+              質問や根拠の中の、点線の下線がある言葉は、押すと短い説明が出ます。それでも分からない言葉があれば、ここで聞いてください。判定には使いません。
               {termRemaining !== null && `（あと${termRemaining}回）`}
             </p>
             {terms.length > 0 && (
@@ -1453,6 +1468,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
             </label>
             <input
               id="term"
+              ref={termInputRef}
               type="text"
               maxLength={500}
               value={termInput}
@@ -1699,6 +1715,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       >
         <p className="rounded-8 bg-solid-gray-50 px-3 py-2 text-std-16B-170 text-solid-gray-800">
           判定カード：回答から読み取った内容で、自動で更新されます
+          <span className="block text-std-16N-170">点線の下線がある言葉は、押すと短い説明が出ます</span>
         </p>
         <div>
           <p className="text-std-16N-170 text-solid-gray-800">
@@ -1709,11 +1726,12 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
             <p className="mt-1 text-std-16N-170 text-solid-gray-900">{verdictNote(card, session !== null)}</p>
           </div>
           {card.checkItems.map((checkItem) => (
+            // チェック項目は厚生労働省の資料の原文。文字は変えず、用語に印だけを付ける
             <p key={checkItem.no} className="mt-2 text-std-16N-170 text-solid-gray-800">
-              チェック項目 {checkItem.no}：{checkItem.text}
+              <TermText prefix={`チェック項目 ${checkItem.no}：`} text={checkItem.text} onAskMore={askMore} />
             </p>
           ))}
-          {card.verdict !== "reviewing" && <EvidenceText evidence={card.itemEvidence} />}
+          {card.verdict !== "reviewing" && <EvidenceText evidence={card.itemEvidence} onAskMore={askMore} />}
         </div>
         <ul className="flex flex-col gap-3">
           {card.viewpoints.map((viewpoint) => (
@@ -1734,7 +1752,9 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 {viewpoint.name}：{statusLabel(viewpoint.status, viewpoint.source)}
               </p>
               {/* 観点名だけでは「取得」「切り離し」が伝わらないので、確かめたいことを添える */}
-              <p className="text-std-16N-170 text-solid-gray-800">確かめたいこと：{viewpoint.goal}</p>
+              <p className="text-std-16N-170 text-solid-gray-800">
+                <TermText prefix="確かめたいこと：" text={viewpoint.goal} onAskMore={askMore} />
+              </p>
               {reasons[viewpoint.id] && <p>{reasons[viewpoint.id]}</p>}
               {viewpoint.status !== "not_asked" && (
                 // 根拠は長いので、直前に更新した観点だけ開く。ほかは観点の行が一目で見えるようにたたむ
@@ -1743,7 +1763,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                   open={recent.some((item) => item.viewpointId === viewpoint.id)}
                 >
                   <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">根拠を見る</summary>
-                  <EvidenceText evidence={viewpoint.evidence} />
+                  <EvidenceText evidence={viewpoint.evidence} onAskMore={askMore} />
                 </details>
               )}
             </li>
