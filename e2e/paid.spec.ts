@@ -120,7 +120,8 @@ test.describe("@paid 実際の Claude を呼ぶ", () => {
     // 箱が出て、引用した文が返事の原文にそのまま含まれる（空白と改行の違いだけ無視する）
     const box = injectionBox(page);
     await expect(box).toBeVisible();
-    await expect(box).toContainText("この文は読み取りに使っていません");
+    // 「原文」と重なっていない、ふつうの言い方になっている（重なっていれば「見比べてください」の言い方に変わる）
+    await expect(box).toContainText("判定にも、下の読み取りの「原文」にも使っていません");
     const quotes = box.locator("blockquote");
     expect(await quotes.count()).toBeGreaterThan(0);
     for (const text of await quotes.allTextContents()) {

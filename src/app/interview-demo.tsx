@@ -54,6 +54,22 @@ const STEP_GROUPS = [
 // 返事でも状態が同じだった観点の言い方。返事で決まるのは「できている」か「できていない」だけ
 const SAME_WORDS: Partial<Record<ViewpointStatus, string>> = { confirmed: "できている", denied: "できていない" };
 
+// 返事の中の AI への指示のように読める文の知らせ。箱の1文目と、読み上げの文に使う。
+// 言うのはコードで確かめたことだけ：報告は判定に渡していない、要件の「原文」と重なっていない。
+// 重なっているときは言い切らず、返事と見比べるよう促す。文が2つ以上なら「これらの文」と言う
+type Suspicious = { quotes: string[]; overlap: boolean };
+
+function suspiciousNoun(suspicious: Suspicious): string {
+  return suspicious.quotes.length > 1 ? "これらの文" : "この文";
+}
+
+function suspiciousNotice(suspicious: Suspicious): string {
+  const noun = suspiciousNoun(suspicious);
+  return suspicious.overlap
+    ? `返事の中に、AI への指示のように読める文がありました。${noun}は、下の読み取りの「原文」と重なっています。読み取りの結果が合っているか、返事と見比べてください。`
+    : `返事の中に、AI への指示のように読める文がありました。${noun}は、判定にも、下の読み取りの「原文」にも使っていません。`;
+}
+
 function replyChangeText(change: ReplyChange): string {
   return change.same
     ? `${change.name}は、ベンダーの返事でも${SAME_WORDS[change.status]}でした`
@@ -252,8 +268,9 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [replyChanges, setReplyChanges] = useState<ReplyChange[]>([]);
   const [replyVerdict, setReplyVerdict] = useState<{ before: string; after: string } | null>(null);
   // 返事の中の、AI への指示のように読める文（返事からそのままの引用。サーバーで実在を確かめ済み）。
-  // 画面で知らせるだけで、判定にも読み取りにも使われていない。印刷用の1枚と保存ファイルには入れない
-  const [suspicious, setSuspicious] = useState<string[]>([]);
+  // 画面で知らせるだけで、判定にも読み取りにも使われていない。印刷用の1枚と保存ファイルには入れない。
+  // overlap は、その文が要件の根拠の原文と重なっているとき（「読み取りに使っていない」と言い切らず、見比べるよう促す）
+  const [suspicious, setSuspicious] = useState<{ quotes: string[]; overlap: boolean }>({ quotes: [], overlap: false });
   // 直前の強調が、問診の回答によるものか、ベンダーの返事によるものか
   const [recentSource, setRecentSource] = useState<"answer" | "reply">("answer");
   const [loadedNotice, setLoadedNotice] = useState("");
@@ -600,7 +617,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setResults([]);
       setReplyChanges([]);
       setReplyVerdict(null);
-      setSuspicious([]);
+      setSuspicious({ quotes: [], overlap: false });
       // 保存ファイルには質問と回答が入っていないので、「これまでの質問と回答」は出さない
       setHistory([]);
       // 保存した日は表示にだけ使う。形式はサーバーで確かめ済みだが、日付が読めなければ出さない
@@ -828,6 +845,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     setBusy(true);
     setBusyMessage("返事を読み取っています。10秒ほどかかります…");
     setError("");
+    // 同じ返事をもう一度確かめて結果が同じでも読み上げられるよう、いったん空にしてから入れる
+    setLive("");
     try {
       const response = await postJson("/api/verify-reply", JSON.stringify({ session, reply }));
       if (!response.ok) {
@@ -837,7 +856,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       const data = await response.json();
       const checked: ReadResult[] = data.results;
       const nextCard: Card = data.card;
-      const found: string[] = Array.isArray(data.suspicious) ? data.suspicious : [];
+      const found: { quotes: string[]; overlap: boolean } = {
+        quotes: Array.isArray(data.suspicious?.quotes) ? data.suspicious.quotes : [],
+        overlap: data.suspicious?.overlap === true,
+      };
       setResults(checked);
       setSuspicious(found);
       // 返事で状態か確認の出どころが変わった観点を集め、結果の下と判定カードの強調に使う
@@ -885,7 +907,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         (changes.length === 0
           ? "返事を読み取りました。観点の状態は変わりませんでした。"
           : `返事を読み取りました。${changes.map(replyChangeText).join("。")}。`) +
-          (found.length > 0 ? "返事の中に、AI への指示のように読める文がありました。この文は読み取りに使っていません。" : ""),
+          (found.quotes.length > 0 ? suspiciousNotice(found) : ""),
       );
       requestFocus("results");
     } catch {
@@ -1710,26 +1732,25 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                   返事を読み取った結果
                 </h3>
                 {/* AI への指示のように読める文が返事にあったときだけ出す。落ち着いた色にし、どちらの味方もしない言い方にする */}
-                {suspicious.length > 0 && (
+                {suspicious.quotes.length > 0 && (
                   <div
                     role="status"
                     aria-label="返事の中の、AI への指示のように読める文"
                     className="flex flex-col gap-2 rounded-8 border-l-4 border-solid-gray-420 bg-solid-gray-50 p-4 text-solid-gray-900"
                   >
-                    <p className="text-std-16B-170">
-                      返事の中に、AI への指示のように読める文がありました。この文は読み取りに使っていません。
-                    </p>
+                    <p className="text-std-16B-170">{suspiciousNotice(suspicious)}</p>
                     <ul className="flex flex-col gap-2">
-                      {suspicious.map((quote) => (
+                      {suspicious.quotes.map((quote) => (
                         <li key={quote}>
-                          <blockquote className="wrap-anywhere whitespace-pre-wrap border-l-4 border-solid-gray-420 pl-3 text-std-16N-170 text-solid-gray-800">
+                          {/* 灰色の背景の上なので、引用の線は 420 より濃い 536 にする（3:1 以上） */}
+                          <blockquote className="wrap-anywhere whitespace-pre-wrap border-l-4 border-solid-gray-536 pl-3 text-std-16N-170 text-solid-gray-800">
                             原文：{quote}
                           </blockquote>
                         </li>
                       ))}
                     </ul>
                     <p className="text-std-16N-170">
-                      この文がなぜ入っていたかを、ベンダーに確かめてください。ひな形の文が残ったなど、誤って入ることもあります。
+                      {suspiciousNoun(suspicious)}がなぜ入っていたかを、ベンダーに確かめてください。ひな形の文が残ったなど、誤って入ることもあります。
                     </p>
                   </div>
                 )}
@@ -1741,7 +1762,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                         {RESULT_LABELS[result.result]}
                       </p>
                       {result.quote && (
-                        <blockquote className="mt-2 border-l-4 border-solid-gray-420 pl-3 text-std-16N-170 text-solid-gray-800">
+                        <blockquote className="wrap-anywhere mt-2 border-l-4 border-solid-gray-420 pl-3 text-std-16N-170 text-solid-gray-800">
                           原文：{result.quote}
                         </blockquote>
                       )}

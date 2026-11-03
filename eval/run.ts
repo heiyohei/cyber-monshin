@@ -83,6 +83,8 @@ type TranscriptEntry =
       requirements: { id: string; viewpointId: string; text: string }[];
       results: unknown[];
       suspicious: string[];
+      // 報告の文が、要件の根拠の原文と重なっていたか（画面の言い方が変わる）
+      suspiciousOverlap: boolean;
     }
   | { type: "event"; text: string };
 
@@ -179,6 +181,7 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
         requirements: request.requirements.map(({ id, viewpointId, text }) => ({ id, viewpointId, text })),
         results,
         suspicious: suspicious.quotes,
+        suspiciousOverlap: suspicious.overlap,
       });
       // 偽の指示を含むケースでは報告があり、ほかのケースでは報告がないことを数える
       result.suspicious = suspicious.quotes.length;

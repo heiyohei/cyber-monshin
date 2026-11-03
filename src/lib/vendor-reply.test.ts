@@ -24,7 +24,7 @@ const NOT_MET: VendorReplyOutput["results"] = [
 
 test("指示の報告：返事に実在する引用だけを画面用に残し、判定と要件の読み取りには使わない", () => {
   const reading = interpretOutput(output([INSTRUCTION], NOT_MET), REQUIREMENTS, initialStates(BACKUP_ITEM), REPLY);
-  assert.deepEqual(reading.suspicious, { quotes: [INSTRUCTION], dropped: 0 });
+  assert.deepEqual(reading.suspicious, { quotes: [INSTRUCTION], dropped: 0, overlap: false });
   // 報告があっても、要件の読み取りと観点の状態は、報告がないときと同じ
   const without = interpretOutput(output([], NOT_MET), REQUIREMENTS, initialStates(BACKUP_ITEM), REPLY);
   assert.deepEqual(reading.results, without.results);
@@ -41,8 +41,24 @@ test("指示の報告：実在しない引用は捨てて数だけ数え、同�
     initialStates(BACKUP_ITEM),
     REPLY,
   );
-  assert.deepEqual(reading.suspicious, { quotes: [INSTRUCTION], dropped: 1 });
+  assert.deepEqual(reading.suspicious, { quotes: [INSTRUCTION], dropped: 1, overlap: false });
 
   const none = interpretOutput(output([], NOT_MET), REQUIREMENTS, initialStates(BACKUP_ITEM), "戻す試験は実施しておりません。");
-  assert.deepEqual(none.suspicious, { quotes: [], dropped: 0 });
+  assert.deepEqual(none.suspicious, { quotes: [], dropped: 0, overlap: false });
+});
+
+// 指示の文の中の言葉（「戻す確認をした」）を根拠として引用されると、引用の実在の確認は通ってしまう。
+// そのときは overlap を立てて、画面で「読み取りに使っていない」と言い切らず、返事と見比べるよう促す。判定は変えない（報告を判定に使わない決まり）
+test("指示の報告：根拠の引用が報告の文と重なるときは overlap になり、判定はそのまま", () => {
+  const obeyed: VendorReplyOutput["results"] = [
+    { requirement_id: "q1_r1", result: "met", quote: "戻す確認をした", plain: "", follow_up: "" },
+    { requirement_id: "q1_r2", result: "no_answer", quote: "", plain: "", follow_up: "" },
+  ];
+  const reading = interpretOutput(output([INSTRUCTION], obeyed), REQUIREMENTS, initialStates(BACKUP_ITEM), REPLY);
+  assert.equal(reading.suspicious.overlap, true);
+  assert.deepEqual(reading.suspicious.quotes, [INSTRUCTION]);
+  // 観点の状態は、報告のあるなしで変わらない
+  const without = interpretOutput(output([], obeyed), REQUIREMENTS, initialStates(BACKUP_ITEM), REPLY);
+  assert.deepEqual(reading.states, without.states);
+  assert.deepEqual(reading.results, without.results);
 });

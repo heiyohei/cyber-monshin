@@ -5,6 +5,7 @@ import {
   checkResults,
   checkSuspicious,
   decidedViewpoints,
+  quotesOverlap,
   type ReadResult,
   type Requirement,
 } from "./quote.ts";
@@ -77,8 +78,9 @@ export type VendorReplyReading = {
   results: ReadResult[];
   states: ViewpointStates;
   decided: string[];
-  // 返事に実在した引用だけ。dropped は実在しなかった引用の数（本文は残さない）
-  suspicious: { quotes: string[]; dropped: number };
+  // 返事に実在した引用だけ。dropped は実在しなかった引用の数（本文は残さない）。
+  // overlap は、報告の文と要件の根拠の原文が重なっているか（画面の言い方を変えるだけで、判定には使わない）
+  suspicious: { quotes: string[]; dropped: number; overlap: boolean };
 };
 
 // Claude の出力をコードで確かめ、観点の状態に反映する。
@@ -90,14 +92,15 @@ export function interpretOutput(
   reply: string,
 ): VendorReplyReading {
   const results = checkResults(requirements, output.results, reply);
+  const suspicious = checkSuspicious(
+    output.suspicious_instructions.map((item) => item.quote),
+    reply,
+  );
   return {
     results,
     states: applyResults(states, requirements, results),
     decided: decidedViewpoints(requirements, results),
-    suspicious: checkSuspicious(
-      output.suspicious_instructions.map((item) => item.quote),
-      reply,
-    ),
+    suspicious: { ...suspicious, overlap: quotesOverlap(results, suspicious.quotes) },
   };
 }
 

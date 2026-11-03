@@ -49,19 +49,21 @@ export async function POST(request: Request) {
       request.signal,
       usage,
     );
-    // 指示のような文の報告は、数だけログに出す（返事の本文も引用も残さない）
+    // 指示のような文の報告は、数と重なりの有無だけログに出す（返事の本文も引用も残さない）
     console.info("[verify-reply] 実測", {
       ...usage,
       ms: Date.now() - startedAt,
       suspicious: suspicious.quotes.length,
       droppedSuspicious: suspicious.dropped,
+      overlapSuspicious: suspicious.overlap,
     });
     session.states = states;
     session.sources = withReplySources(session.sources, decided);
     return Response.json({
       results,
-      // 返事に実在した、AI への指示のように読める文。画面で知らせるだけで、判定には使っていない
-      suspicious: suspicious.quotes,
+      // 返事に実在した、AI への指示のように読める文。画面で知らせるだけで、判定には使っていない。
+      // overlap は、その文が要件の根拠の原文と重なっているか（画面の言い方を変える）
+      suspicious: { quotes: suspicious.quotes, overlap: suspicious.overlap },
       card: buildCard(itemOf(session), states, session.lastYearAnswer, session.sources),
       session: sealSession(session, secret),
     });

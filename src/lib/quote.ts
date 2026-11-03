@@ -61,6 +61,16 @@ export function checkSuspicious(quotes: string[], reply: string): { quotes: stri
   return { quotes: kept, dropped };
 }
 
+// 報告の引用と、要件の根拠の引用（確かめたあとのもの）が重なっているか（どちらかが他方を含む）。
+// 重なっていれば、画面で「読み取りに使っていない」と言い切らず、返事と見比べるよう促すための印。判定には使わない
+export function quotesOverlap(results: ReadResult[], suspicious: string[]): boolean {
+  const evidence = results.map((result) => normalize(result.quote)).filter((quote) => quote.length > 0);
+  return suspicious.some((quote) => {
+    const normalized = normalize(quote);
+    return normalized.length > 0 && evidence.some((item) => item.includes(normalized) || normalized.includes(item));
+  });
+}
+
 // 1つの観点に要件が複数あるときは、甘くならない側にまとめる。
 // 1つでも満たさなければ「満たさない」、すべて満たすときだけ「満たす」
 export function viewpointResult(
