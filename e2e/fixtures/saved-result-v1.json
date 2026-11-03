@@ -1,0 +1,52 @@
+{
+  "format": "cyber-monshin-result",
+  "version": 1,
+  "savedAt": "2026-11-01T09:00:00.000Z",
+  "items": [
+    {
+      "itemId": "backup",
+      "lastYearAnswer": "yes",
+      "vendorAnswer": "no_item",
+      "states": {
+        "acquire": "confirmed",
+        "restore": "unknown",
+        "isolate": "denied",
+        "procedure": "confirmed"
+      },
+      "sources": {
+        "acquire": "answer",
+        "restore": "answer",
+        "isolate": "answer",
+        "procedure": "answer"
+      },
+      "reasons": {
+        "acquire": "保守のベンダーが毎晩バックアップを取り、毎月の作業報告が届いているとの回答でした。",
+        "restore": "バックアップから実際に戻してみたことがあるかは、分からないとの回答でした。",
+        "isolate": "バックアップの機器は、院内のサーバーにつないだままとの回答でした。",
+        "procedure": "戻す手順は文書になっていて、誰が何をするかも決まっているとの回答でした。"
+      },
+      "summary": "バックアップは毎晩取られていますが、実際に戻せるかは確かめておらず、控えはふだんの機器につながったままです。ベンダーに、戻す試験の実績と、切り離した保管ができるかを確かめる必要があります。",
+      "vendorQuestions": [
+        {
+          "gapType": "no_item",
+          "concern": "いざというときに、バックアップから本当に戻せるかが分からない。",
+          "question": "バックアップについて、次の点を、はい／いいえで教えてください。\n1. バックアップから実際にデータを戻す試験をしたことがありますか。あれば、最後に行った時期も教えてください。\n2. バックアップの控えは、院内のネットワークから切り離した場所に保管していますか。",
+          "requirements": [
+            {
+              "id": "q1_r1",
+              "viewpointId": "restore",
+              "text": "バックアップから実際にデータを戻す試験をしたことがある",
+              "followUp": "次の点を教えてください：バックアップから実際にデータを戻す試験をしたことがある"
+            },
+            {
+              "id": "q1_r2",
+              "viewpointId": "isolate",
+              "text": "バックアップの控えを、院内のネットワークから切り離した場所に保管している",
+              "followUp": "次の点を教えてください：バックアップの控えを、院内のネットワークから切り離した場所に保管している"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

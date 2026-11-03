@@ -208,6 +208,8 @@ npm run dev
 | コマンド | 内容 |
 | --- | --- |
 | `npm test` | 判定、引用、署名、保存ファイル、Excel の読み取りなどの自動テスト |
+| `npm run test:e2e` | ブラウザで画面を動かす e2e テスト（Claude を呼ばない組）。`next dev` を自動で起こす（ポートは `E2E_PORT`、既定 3001。`npm run dev` を動かしたままなら `E2E_PORT=3000`）。Excel の読み込みは、手元の `samples/` に架空の記入例があるときだけ動く |
+| `npm run test:e2e:paid` | 上に、実際に Claude を呼ぶ組（問診の1問目と返事の読み解き）を加えた e2e テスト。費用がかかる |
 | `npm run typecheck` / `npm run lint` / `npm run build` | 型チェック、lint、ビルド |
 | `npm run check:safety` | コミットする変更に、公開リポジトリに入れてはいけないもの（API キー、公開しない名前など）がないかの確認 |
 | `npm run eval -- --note "変更内容"` | 問診の評価。費用がかかる |

@@ -173,3 +173,5 @@ docs/ideas-*.md
 
 # Claude Code の worktree（サブエージェントの作業用）
 .claude/worktrees/
+# e2e テストが失敗したときのスクリーンショットと動画
+e2e/results/
