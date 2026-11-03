@@ -33,6 +33,25 @@ const KEYWORDS: Record<string, Record<string, RegExp>> = {
     inventory: /一覧|台帳|把握|サポート|古い|EOS|機器の種類/,
     verify: /動作|不具合|あと|後|正しく動/,
   },
+  // 下の3項目は、紛らわしい言葉を含む観点を先に並べる（見分けはこの順で行う）
+  devices: {
+    ledger: /一覧|台帳|置き場所/,
+    entry_points: /入口|回線|部署/,
+    source_limit: /つなげ|つない|接続|Wi|私物/,
+    remote: /外から|遠隔|リモート|点検|保守/,
+  },
+  accounts: {
+    two_factor: /カード|指紋|本人|二要素|加えて/,
+    cleanup: /退職|辞め|使っていない|使われていない|不要|ID/,
+    reuse: /使い回|同じパスワード|パスワード/,
+    admin: /管理者|権限|設定を変/,
+  },
+  continuity: {
+    drill: /訓練|練習/,
+    vendor_bcp: /ベンダー.*(計画|備え)|業者.*(計画|備え)/,
+    contacts: /連絡/,
+    plan: /計画|文書|続け|決め/,
+  },
 };
 
 function cost(usage: Usage): number {
@@ -48,7 +67,8 @@ function cost(usage: Usage): number {
 // 質問の順番は Claude が決めるので、質問文の言葉から台本の回答を選ぶ
 function pickAnswer(text: string, remaining: string[], testCase: EvalCase): { id: string; answer: string } {
   const keywords = KEYWORDS[testCase.itemId ?? "backup"];
-  const id = remaining.find((item) => keywords[item].test(text)) ?? remaining[0];
+  const id =
+    Object.keys(keywords).find((item) => remaining.includes(item) && keywords[item].test(text)) ?? remaining[0];
   if (!id) return { id: "なし", answer: "それ以上のことは分かりません。" };
   remaining.splice(remaining.indexOf(id), 1);
   return { id, answer: testCase.answers[id] };
