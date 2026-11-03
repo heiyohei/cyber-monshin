@@ -11,6 +11,12 @@ function shape(parts: TextPart[]): string[] {
 test("用語の区切り：長い用語を優先し、その中の短い用語には印を付けない", () => {
   assert.deepEqual(shape(splitByTerms("管理者権限を持つ人")), ["[管理者権限→管理者権限]", "を持つ人"]);
   assert.deepEqual(shape(splitByTerms("復旧手順を確認している")), ["[復旧手順→復旧手順]", "を確認している"]);
+  assert.deepEqual(shape(splitByTerms("ネットワーク機器の台帳管理を行っている。")), [
+    "[ネットワーク機器→ネットワーク機器]",
+    "の",
+    "[台帳管理→台帳管理]",
+    "を行っている。",
+  ]);
 });
 
 test("用語の区切り：同じ用語は最初の1回だけ印を付け、2回目はその中の短い用語にも付けない", () => {

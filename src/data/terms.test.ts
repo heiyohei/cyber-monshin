@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { GLOSSARY } from "./terms.ts";
 
-test("用語の説明：20〜30件で、空の用語や説明がない", () => {
-  assert.ok(GLOSSARY.length >= 20 && GLOSSARY.length <= 30, `${GLOSSARY.length}件`);
+// 件数は20〜40件。増やしすぎると画面がうるさくなる
+test("用語の説明：20〜40件で、空の用語や説明がない", () => {
+  assert.ok(GLOSSARY.length >= 20 && GLOSSARY.length <= 40, `${GLOSSARY.length}件`);
   for (const entry of GLOSSARY) {
     assert.ok(entry.term.trim() === entry.term && entry.term.length > 0, `用語が空か、前後に空白がある：${entry.term}`);
     assert.ok(entry.short.trim().length > 0, `説明が空：${entry.term}`);
