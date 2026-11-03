@@ -8,12 +8,12 @@ export async function POST(request: Request) {
   const code = process.env.ACCESS_CODE;
   const secret = getSessionSecret();
   if (!code || !secret) {
-    return Response.json({ error: "現在はご利用いただけません。" }, { status: 503 });
+    return Response.json({ error: "現在はご利用いただけません。このアプリの設定に問題があるため、管理者に連絡してください。" }, { status: 503 });
   }
 
   const body = BodySchema.safeParse(await request.json().catch(() => null));
   if (!body.success || !isAccessCodeCorrect(body.data.code, code, secret)) {
-    return Response.json({ error: "合言葉が違います。" }, { status: 401 });
+    return Response.json({ error: "合言葉が違います。もう一度入力してください。" }, { status: 401 });
   }
 
   const cookieStore = await cookies();

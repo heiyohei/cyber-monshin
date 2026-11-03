@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
-import { computeResult } from "./result.ts";
+import { ITEMS } from "../data/items.ts";
+import { computeResult, holeText } from "./result.ts";
 import { initialStates, type ViewpointStates } from "./verdict.ts";
 
 test("結果：まだ確かめていない観点と確認済みの観点は穴に数えない", () => {
@@ -45,4 +46,27 @@ test("結果：穴が3件未満なら見つかった件数だけ示し、次の�
 test("結果：同じ状態なら必ず同じ結果になる", () => {
   const states: ViewpointStates = { acquire: "confirmed", restore: "denied", isolate: "unknown", procedure: "denied" };
   assert.deepEqual(computeResult(BACKUP_ITEM, states), computeResult(BACKUP_ITEM, { ...states }));
+});
+
+test("結果：「わからない」の穴は言い切らず、確かめたいことと起きうることだけを示す", () => {
+  const isolate = BACKUP_ITEM.viewpoints.find((viewpoint) => viewpoint.id === "isolate")!;
+  assert.equal(holeText(isolate, "denied"), isolate.hole);
+  const text = holeText(isolate, "unknown");
+  assert.ok(text.startsWith(`「${isolate.goal}」かどうかが分かりません。`), text);
+  assert.ok(text.includes("おそれがあります"), text);
+  assert.ok(!text.includes("つながったままです"), text);
+
+  const states: ViewpointStates = { acquire: "confirmed", restore: "confirmed", isolate: "unknown", procedure: "confirmed" };
+  assert.equal(computeResult(BACKUP_ITEM, states).holes[0].text, text);
+});
+
+test("結果：どの観点でも、「わからない」の穴の文は言い切らない", () => {
+  for (const item of ITEMS) {
+    for (const viewpoint of item.viewpoints) {
+      assert.equal(holeText(viewpoint, "denied"), viewpoint.hole);
+      const text = holeText(viewpoint, "unknown");
+      assert.ok(text.startsWith(`「${viewpoint.goal}」かどうかが分かりません。`), `${item.id}/${viewpoint.id}: ${text}`);
+      assert.ok(!text.includes("ません。。"), text);
+    }
+  }
 });

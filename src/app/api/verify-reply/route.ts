@@ -18,7 +18,7 @@ function fail(status: number, error: string) {
 
 export async function POST(request: Request) {
   const secret = getSessionSecret();
-  if (!secret) return fail(503, "現在はご利用いただけません。");
+  if (!secret) return fail(503, "現在はご利用いただけません。このアプリの設定に問題があるため、管理者に連絡してください。");
 
   const text = await request.text();
   if (text.length > MAX_BODY_LENGTH) return fail(413, "送る内容が長すぎます。");

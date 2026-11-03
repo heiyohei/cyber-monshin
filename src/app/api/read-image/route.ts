@@ -25,7 +25,7 @@ function fail(status: number, error: string) {
 
 export async function POST(request: Request) {
   const secret = getSessionSecret();
-  if (!secret) return fail(503, "現在はご利用いただけません。");
+  if (!secret) return fail(503, "現在はご利用いただけません。このアプリの設定に問題があるため、管理者に連絡してください。");
 
   // 画像が入るので、本文の上限はほかの API より大きい。ブラウザで縮めてから送る
   const text = await request.text();

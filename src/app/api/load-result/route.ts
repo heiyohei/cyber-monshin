@@ -12,7 +12,7 @@ function fail(status: number, error: string) {
 // 保存したファイルを確かめて、返事の検証を続けられる状態に戻す。Claude は呼ばない
 export async function POST(request: Request) {
   const secret = getSessionSecret();
-  if (!secret) return fail(503, "現在はご利用いただけません。");
+  if (!secret) return fail(503, "現在はご利用いただけません。このアプリの設定に問題があるため、管理者に連絡してください。");
 
   const text = await request.text();
   if (text.length > MAX_FILE_LENGTH) return fail(413, "ファイルが大きすぎます。");

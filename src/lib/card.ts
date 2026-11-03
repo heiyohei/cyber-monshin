@@ -9,7 +9,8 @@ export type Card = {
   label: string;
   checkItems: readonly CheckItem[];
   itemEvidence: Evidence;
-  viewpoints: { id: string; name: string; status: ViewpointStatus; evidence: Evidence }[];
+  // goal は観点名（取得、切り離しなど）だけでは伝わらないときの説明。画面で名前の下に出す
+  viewpoints: { id: string; name: string; goal: string; status: ViewpointStatus; evidence: Evidence }[];
   result: Result;
 };
 
@@ -27,6 +28,7 @@ export function buildCard(item: FocusItem, states: ViewpointStates, lastYearAnsw
     viewpoints: item.viewpoints.map((viewpoint) => ({
       id: viewpoint.id,
       name: viewpoint.name,
+      goal: viewpoint.goal,
       status: states[viewpoint.id],
       evidence: viewpoint.evidence,
     })),

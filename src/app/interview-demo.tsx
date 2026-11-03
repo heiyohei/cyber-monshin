@@ -52,7 +52,7 @@ type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[
 type TermExchange = { question: string; answer: string };
 type RecentReading = { viewpointId: string; status: keyof typeof STATUS_LABELS; reason: string };
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
-type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image";
+type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code";
 // 送る前に、この画面の中で縮めた写真。dataUrl は表示に、data（base64）は送信に使う
 type PreparedImage = { dataUrl: string; data: string; width: number; height: number };
 // 返事の検証で状態が変わった観点。結果の下に出して、何が変わったかを示す
@@ -174,7 +174,8 @@ function verdictNote(card: Card, started: boolean): string {
   const primaryIds = getItem(card.itemId)?.primaryViewpoints ?? [];
   const primary = card.viewpoints.filter((viewpoint) => primaryIds.includes(viewpoint.id));
   const others = card.viewpoints.filter((viewpoint) => !primaryIds.includes(viewpoint.id));
-  const names = (list: { name: string }[]) => list.map((viewpoint) => viewpoint.name).join("、");
+  // 観点名は判定カードの見出しなので、「」で囲んで名前だと分かるようにする
+  const names = (list: { name: string }[]) => list.map((viewpoint) => `「${viewpoint.name}」`).join("、");
   const denied = others.filter((viewpoint) => viewpoint.status === "denied");
   const unknown = others.filter((viewpoint) => viewpoint.status === "unknown");
   const parts: string[] = [];
@@ -183,7 +184,7 @@ function verdictNote(card: Card, started: boolean): string {
   switch (card.verdict) {
     case "reviewing":
       return started
-        ? "まだ確かめていない観点があります。回答に応じて変わります。"
+        ? "まだ確かめていないことがあります。回答に応じて変わります。"
         : "去年のチェックリストの回答です。問診を始めると、回答に応じて変わります。";
     case "confirmed_by_answer":
       return "すべての観点が回答で確認できました。実地の確認ではありません。";
@@ -255,6 +256,12 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const answerRef = useRef<HTMLTextAreaElement>(null);
   const imageRef = useRef<HTMLHeadingElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
+  // 合言葉で止まった操作。確かめたあとに、同じ操作を続ける（同じボタンを2回押さなくて済むように）
+  const retryRef = useRef<(() => void) | null>(null);
+  const [codeNotice, setCodeNotice] = useState("");
+  // 選択肢を押すと回答欄に入るだけで、まだ送られていない。そのことを文で示す（事務職員役の試用で迷った点）
+  const [optionNote, setOptionNote] = useState(false);
 
   function requestFocus(target: FocusTarget) {
     // 同じ先に続けて移すときも効くよう、番号を進める
@@ -271,6 +278,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       results: resultsRef,
       error: errorRef,
       image: imageRef,
+      code: codeRef,
     };
     const element = refs[focusTarget.target].current;
     if (!element) return;
@@ -287,6 +295,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setPreparedImage(null);
       setImageReading(null);
       setImageNotice(null);
+      setOptionNote(false);
       requestFocus("question");
     }
     if (event.type === "message") setNote(event.text);
@@ -326,13 +335,19 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     requestFocus("error");
   }
 
-  async function failFrom(response: Response) {
+  async function failFrom(response: Response, retry?: () => void) {
     const data = await response.json().catch(() => null);
-    if (response.status === 401) setNeedsCode(true);
     showError(data?.error ?? "処理に失敗しました。もう一度ボタンを押してください。");
+    // 合言葉の欄は押したあとに出るので、見落とさないよう焦点を欄へ移す。確かめたら止まった操作を続ける
+    if (response.status === 401) {
+      retryRef.current = retry ?? null;
+      setNeedsCode(true);
+      requestFocus("code");
+    }
   }
 
   function postJson(path: string, body: BodyInit) {
+    setCodeNotice("");
     return fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -370,7 +385,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     try {
       const response = await postJson("/api/interview", JSON.stringify(body));
       if (!response.ok || !response.body) {
-        await failFrom(response);
+        await failFrom(response, () => void sendInterview(body));
         failed = true;
         return false;
       }
@@ -542,7 +557,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     if (!checked && needsPersonalInfoCheck(answer, "answer")) return;
     setWarning(null);
     const sent = await sendInterview({ session, answer });
-    if (sent) setAnswer("");
+    if (sent) {
+      setAnswer("");
+      setOptionNote(false);
+    }
   }
 
   async function submitAnswer(event: FormEvent) {
@@ -566,7 +584,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     try {
       const response = await postJson("/api/ask-term", JSON.stringify({ session, question: termInput }));
       if (!response.ok) {
-        await failFrom(response);
+        await failFrom(response, () => void sendTerm(true));
         return;
       }
       const data = await response.json();
@@ -633,7 +651,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         JSON.stringify({ session, image: { media_type: "image/jpeg", data: preparedImage.data } }),
       );
       if (!response.ok) {
-        await failFrom(response);
+        await failFrom(response, () => void sendImage());
         return;
       }
       const data = await response.json();
@@ -676,6 +694,16 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     }
     setNeedsCode(false);
     setCode("");
+    const retry = retryRef.current;
+    retryRef.current = null;
+    if (retry) {
+      setLive("合言葉を確かめました。続きを進めます。");
+      retry();
+    } else {
+      const text = "合言葉を確かめました。最初に押したボタンを、もう一度押してください。";
+      setCodeNotice(text);
+      setLive(text);
+    }
   }
 
   async function submitReply(event: FormEvent) {
@@ -692,7 +720,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     try {
       const response = await postJson("/api/verify-reply", JSON.stringify({ session, reply }));
       if (!response.ok) {
-        await failFrom(response);
+        await failFrom(response, () => void sendReply(true));
         return;
       }
       const data = await response.json();
@@ -804,20 +832,28 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           </p>
         )}
 
-        <p aria-live="polite" className={busy ? "text-std-16N-170" : "sr-only"}>
+        <p
+          aria-live="polite"
+          className={busy ? "rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4 text-std-16B-170 text-blue-900" : "sr-only"}
+        >
           {busy ? busyMessage : ""}
         </p>
         <p aria-live="polite" className="sr-only">
           {live}
         </p>
 
+        {codeNotice && (
+          <p className="rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4 text-std-16B-170 text-blue-900">{codeNotice}</p>
+        )}
+
         {needsCode && (
           <form onSubmit={submitCode} className="flex flex-col gap-2">
             <label htmlFor="access-code" className={labelClass}>
-              合言葉
+              合言葉（このアプリを案内した人に聞いてください）
             </label>
             <input
               id="access-code"
+              ref={codeRef}
               type="password"
               value={code}
               onChange={(event) => setCode(event.target.value)}
@@ -1009,7 +1045,11 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 </li>
               ))}
             </ul>
-            {verdictChange && <p className="text-std-16B-170">判定が「{verdictChange}」に変わりました。</p>}
+            {verdictChange && (
+              <p className="text-std-16B-170">
+                判定が「{verdictChange}」に変わりました。{verdictNote(card, true)}
+              </p>
+            )}
           </section>
         )}
 
@@ -1017,7 +1057,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           <h2 ref={questionRef} tabIndex={-1} className="text-std-20B-150 text-solid-gray-900 focus-visible:focus-ring">
             質問に答える
             <span className="ml-3 text-std-16N-170 text-solid-gray-800">
-              確かめた観点 {card.viewpoints.filter((viewpoint) => viewpoint.status !== "not_asked").length}/
+              確かめたこと {card.viewpoints.filter((viewpoint) => viewpoint.status !== "not_asked").length}/
               {card.viewpoints.length}
             </span>
           </h2>
@@ -1037,6 +1077,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                     type="button"
                     onClick={() => {
                       setAnswer(option);
+                      setOptionNote(true);
+                      setLive("選択肢を回答欄に入れました。そのまま送るなら「回答する」を押してください。");
                       answerRef.current?.focus();
                     }}
                     className="min-h-11 rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring"
@@ -1223,6 +1265,11 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
             />
             {warning?.target === "answer" && (
               <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
+            )}
+            {optionNote && (
+              <p className="text-std-16N-170 text-solid-gray-800">
+                選択肢を回答欄に入れました。まだ送っていません。そのまま送るなら「回答する」を押してください。付け足して書いてもかまいません。
+              </p>
             )}
             <SentContent label="回答" text={answer} />
             <button type="submit" disabled={!answer.trim() || termBusy || imageBusy} className={buttonClass}>
@@ -1502,7 +1549,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         </p>
         <div>
           <p className="text-std-16N-170 text-solid-gray-800">
-            {card.itemName}（{checkItemNumbers(card)}）
+            {card.itemName}（チェック項目 {checkItemNumbers(card)}）
           </p>
           <div className={`mt-2 rounded-8 border-l-8 px-4 py-3 ${VERDICT_STYLES[card.verdict]}`}>
             <p className="text-std-32B-150 text-solid-gray-900">{card.label}</p>
@@ -1533,6 +1580,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               <p className="text-std-16B-170">
                 {viewpoint.name}：{STATUS_LABELS[viewpoint.status]}
               </p>
+              {/* 観点名だけでは「取得」「切り離し」が伝わらないので、確かめたいことを添える */}
+              <p className="text-std-16N-170 text-solid-gray-800">確かめたいこと：{viewpoint.goal}</p>
               {reasons[viewpoint.id] && <p>{reasons[viewpoint.id]}</p>}
               {viewpoint.status !== "not_asked" && (
                 // 根拠は長いので、直前に更新した観点だけ開く。ほかは観点の行が一目で見えるようにたたむ
