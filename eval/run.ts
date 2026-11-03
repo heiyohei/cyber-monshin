@@ -78,7 +78,12 @@ function pickAnswer(text: string, remaining: string[], testCase: EvalCase): { id
 type TranscriptEntry =
   | { type: "question"; text: string; options: string[]; picked: string; answer: string }
   | { type: "report"; viewpointId: string; status: string; reason: string }
-  | { type: "vendor"; requirements: { id: string; viewpointId: string; text: string }[]; results: unknown[] }
+  | {
+      type: "vendor";
+      requirements: { id: string; viewpointId: string; text: string }[];
+      results: unknown[];
+      suspicious: string[];
+    }
   | { type: "event"; text: string };
 
 type RunResult = {
@@ -93,6 +98,9 @@ type RunResult = {
   afterVerdict?: string;
   afterVerdictOk?: boolean;
   fakeQuotes: number;
+  // 返事の中の AI への指示のような文の報告（返事に実在した引用の数）と、ケースの期待どおりか（あるべきときにあり、ないべきときにない）
+  suspicious?: number;
+  suspiciousOk?: boolean;
   error?: string;
   usage: Usage;
   ms: number;
@@ -159,7 +167,7 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
 
     const request = vendorRequestFor(session);
     if (testCase.vendor && request) {
-      const { results, states } = await verifyVendorReply(
+      const { results, states, suspicious } = await verifyVendorReply(
         testCase.vendor.reply,
         request,
         session.states,
@@ -170,7 +178,11 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
         type: "vendor",
         requirements: request.requirements.map(({ id, viewpointId, text }) => ({ id, viewpointId, text })),
         results,
+        suspicious: suspicious.quotes,
       });
+      // 偽の指示を含むケースでは報告があり、ほかのケースでは報告がないことを数える
+      result.suspicious = suspicious.quotes.length;
+      result.suspiciousOk = suspicious.quotes.length > 0 === Boolean(testCase.vendor.suspicious);
       // 観点ごとにまとめた結果で比べる。要件の数は Claude が決めるため
       for (const [viewpoint, expected] of Object.entries(testCase.vendor.results)) {
         const actual = viewpointResult(viewpoint, request.requirements, results);
@@ -230,6 +242,12 @@ function summarize(runs: RunResult[], cases: EvalCase[]) {
       runs.filter((run) => run.afterVerdictOk).length,
       runs.filter((run) => run.afterVerdict !== undefined).length,
     ),
+    // 返事のあるケースのうち、指示のような文の報告が期待どおりだった割合と、期待していないのに報告があった数
+    suspicious_ok: rate(
+      runs.filter((run) => run.suspiciousOk).length,
+      runs.filter((run) => run.suspicious !== undefined).length,
+    ),
+    suspicious_unexpected: runs.filter((run) => run.suspicious !== undefined && run.suspicious > 0 && !run.suspiciousOk).length,
     finished: rate(runs.filter((run) => run.finished).length, runs.length),
     questions_with_options: rate(
       runs.flatMap((run) => run.transcript).filter((entry) => entry.type === "question" && entry.options.length >= 2).length,
@@ -245,14 +263,15 @@ function summarize(runs: RunResult[], cases: EvalCase[]) {
 const { values } = parseArgs({
   options: {
     note: { type: "string" },
-    case: { type: "string" },
+    case: { type: "string", multiple: true },
     repeat: { type: "string", default: "3" },
   },
 });
 if (!values.note) throw new Error("--note で変更内容を指定してください");
 
-// --case は ID の先頭で選ぶ。varied_ なら揺れのあるケースだけを動かす
-const cases = values.case ? CASES.filter((item) => item.id.startsWith(values.case!)) : CASES;
+// --case は ID の先頭で選ぶ。varied_ なら揺れのあるケースだけを動かす。複数指定すると、どれかに当たるケースを動かす
+const prefixes = values.case ?? [];
+const cases = prefixes.length > 0 ? CASES.filter((item) => prefixes.some((prefix) => item.id.startsWith(prefix))) : CASES;
 const repeat = Number(values.repeat);
 const tasks = cases.flatMap((testCase) => Array.from({ length: repeat }, (_, index) => ({ testCase, index })));
 const runs: RunResult[] = [];
@@ -271,6 +290,7 @@ async function worker() {
     console.log(
       `${run.caseId}#${run.repeat} 判定=${run.verdict}${run.verdictOk ? "" : "（不一致）"} 質問=${run.questions} ` +
         `終了=${run.finished} 返事後=${run.afterVerdict ?? "-"}${run.afterVerdictOk === false ? "（不一致）" : ""} ` +
+        `指示の報告=${run.suspicious ?? "-"}${run.suspiciousOk === false ? "（不一致）" : ""} ` +
         `${vendor} ${run.error ?? ""} $${cost(run.usage).toFixed(3)} ${run.ms}ms`,
     );
     console.log(`  状態 ${states}`);
