@@ -157,3 +157,7 @@ next-env.d.ts
 
 # 公開しない検査用の一覧
 .local/
+
+# 手元だけに置く作業用のファイル
+docs/plan.md
+.claude/launch.json
