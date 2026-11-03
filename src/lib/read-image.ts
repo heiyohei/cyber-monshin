@@ -14,6 +14,9 @@ export const IMAGE_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"] as co
 export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
 // 読み取りの深さ。low と medium を同じ画像で比べ、読み取りの中身が同じで low のほうが速かったので low にした（2026-11-03）
 export const IMAGE_EFFORT = "low";
+// 読み取りのモデル。下書きを作るだけで判定を変えない役割なので、Opus 5.5 と Sonnet 5.5 を同じ画像2枚で比べた。
+// 書き写さない、偽の指示に従わない、分からないことを挙げる、の3点が同じで、費用が約半分だったので Sonnet 5.5 にした（2026-11-03）
+export const IMAGE_MODEL = "claude-sonnet-5-5";
 
 export type ImageInput = { media_type: ImageMediaType; data: string };
 
@@ -136,6 +139,7 @@ export async function readImage(
   const stream = client.beta.messages.stream(
     {
       ...CLAUDE_PARAMS,
+      model: IMAGE_MODEL,
       betas: [...CLAUDE_PARAMS.betas],
       output_config: { effort: IMAGE_EFFORT, format: { type: "json_schema", schema: OUTPUT_SCHEMA } },
       system: SYSTEM_PROMPT,

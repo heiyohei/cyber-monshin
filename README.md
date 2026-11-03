@@ -139,7 +139,7 @@ Built with Claude: Japan 2026 の提出作品です（テーマ2「本来、誰�
 | 項目 | 内容 |
 | --- | --- |
 | アプリ | Next.js 16（TypeScript）、Vercel |
-| Claude | Claude Opus 5.5（問診と返事の検証は effort `medium`、写真の読み取りは `low`）、ことばの相談は Claude Haiku 5.5、公式 TypeScript SDK、`strict` なツール定義、Structured Outputs、画像の読み取り |
+| Claude | 問診と返事の検証は Claude Opus 5.5（effort `medium`）、写真の読み取りは Claude Sonnet 5.5（effort `low`）、ことばの相談は Claude Haiku 5.5。役割ごとに、品質が保てる範囲で安いモデルを測って選んでいる。公式 TypeScript SDK、`strict` なツール定義、Structured Outputs、画像の読み取り |
 | Excel | [read-excel-file](https://gitlab.com/catamphetamine/read-excel-file)（MIT License）をブラウザの中で使用 |
 | デザイン | [@digital-go-jp/tailwind-theme-plugin](https://github.com/digital-go-jp/tailwind-theme-plugin)（MIT License、Copyright (c) 2023 デジタル庁）の色、文字、角丸。部品は[デジタル庁デザインシステム](https://design.digital.go.jp/dads/)の説明を参考に、このプロジェクトで書いたもの |
 
