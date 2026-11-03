@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   const item = file.items[0];
   return Response.json({
     session: sealSession(session, secret),
-    card: buildCard(itemOf(session), session.states, session.lastYearAnswer),
+    card: buildCard(itemOf(session), session.states, session.lastYearAnswer, session.sources),
     reasons: item.reasons,
     summary: item.summary,
     vendor: vendorRequestFor(session),

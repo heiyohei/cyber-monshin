@@ -1,6 +1,9 @@
 // 判定はここだけで計算する。Claude の出力をそのまま判定にしない。
 export type ViewpointStatus = "not_asked" | "confirmed" | "denied" | "unknown";
 export type ViewpointStates = Record<string, ViewpointStatus>;
+// 観点の状態を何で確かめたか。判定には使わず、表示だけに使う
+export type ViewpointSource = "answer" | "reply";
+export type ViewpointSources = Partial<Record<string, ViewpointSource>>;
 
 export type Verdict = "no" | "unknown" | "paper_only" | "confirmed_by_answer" | "reviewing";
 

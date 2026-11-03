@@ -29,7 +29,7 @@ const origin = new URL(values.url).origin;
 const runDir = `eval/runs/clerk-${new Date().toISOString().replace(/[:.]/g, "-")}-${persona.id}`;
 mkdirSync(`${runDir}/browser`, { recursive: true });
 
-// 画面の観点の状態の言葉（src/app/interview-demo.tsx の STATUS_LABELS と同じ）
+// 画面の観点の状態の言葉（src/lib/card.ts の statusLabel と同じ。問診の間は出どころが回答なので、この言葉になる）
 const STATUS_LABELS: Record<string, string> = {
   not_asked: "まだ確かめていません",
   confirmed: "回答で確認",

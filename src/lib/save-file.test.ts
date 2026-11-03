@@ -15,6 +15,7 @@ function finishedSession() {
       requirements: [{ id: "q1_r1", viewpointId: "restore", text: "戻す確認をした", followUp: "日を教えてください" }],
     },
   ];
+  session.sources = { acquire: "reply", restore: "answer", isolate: "answer", procedure: "answer" };
   session.messages = [{ role: "user", content: "会話の履歴" }];
   return session;
 }
@@ -31,9 +32,18 @@ test("保存と読み込み：状態と確認事項が戻り、終わった問�
   const loaded = sessionFromSaveFile(file);
   assert.ok(loaded);
   assert.equal(loaded.session.states.isolate, "denied");
+  assert.equal(loaded.session.sources?.acquire, "reply");
   assert.equal(loaded.session.finished, true);
   assert.equal(loaded.session.messages.length, 0);
   assert.equal(vendorRequestFor(loaded.session)?.requirements[0].id, "q1_r1");
+});
+
+test("読み込み：確認の出どころがない前のファイルも読み込める", () => {
+  const file = JSON.parse(JSON.stringify(buildSaveFile(finishedSession(), {}, "要約")));
+  delete file.items[0].sources;
+  const loaded = sessionFromSaveFile(file);
+  assert.ok(loaded);
+  assert.deepEqual(loaded.session.sources, {});
 });
 
 test("読み込み：形式、版、値が正しくないファイルを拒否する", () => {
@@ -44,6 +54,8 @@ test("読み込み：形式、版、値が正しくないファイルを拒否�
     { ...good, version: 2 },
     { ...good, items: [{ ...good.items[0], states: { ...good.items[0].states, acquire: "done" } }] },
     { ...good, items: [{ ...good.items[0], summary: "長".repeat(1001) }] },
+    { ...good, items: [{ ...good.items[0], sources: { acquire: "photo" } }] },
+    { ...good, items: [{ ...good.items[0], sources: { other: "reply" } }] },
     {
       ...good,
       items: [

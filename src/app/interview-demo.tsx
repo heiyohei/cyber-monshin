@@ -5,9 +5,9 @@ import { getItem, ITEMS, PLANNED_ITEMS } from "@/data/items";
 import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
 import type { Evidence, FocusItem } from "@/data/types";
 import { PrintSheet } from "./print-sheet";
-import { buildCard, type Card } from "@/lib/card";
+import { buildCard, statusLabel, vendorMessage, type Card } from "@/lib/card";
 import { readItemAnswer, readVendorAnswer, type ExcelReading } from "@/lib/checklist-excel";
-import { initialStates } from "@/lib/verdict";
+import { initialStates, type ViewpointStatus } from "@/lib/verdict";
 import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
 import type { ReadResult } from "@/lib/quote";
@@ -17,13 +17,6 @@ import type { InterviewSession, LastYearAnswer, SealedSession, VendorAnswer, Ven
 
 type Question = { text: string; why: string; options: string[] };
 type ServerEvent = InterviewEvent | { type: "session"; session: SealedSession };
-
-const STATUS_LABELS = {
-  not_asked: "まだ確かめていません",
-  confirmed: "回答で確認",
-  denied: "できていない",
-  unknown: "わからない",
-} as const;
 
 const RESULT_LABELS = {
   met: "満たす",
@@ -48,15 +41,25 @@ const STEP_GROUPS = [
   { key: "budget", title: "予算を立てて検討すること（システムの入れ替えや、保守の契約の見直しのときに）" },
 ] as const;
 
+// 返事でも状態が同じだった観点の言い方。返事で決まるのは「できている」か「できていない」だけ
+const SAME_WORDS: Partial<Record<ViewpointStatus, string>> = { confirmed: "できている", denied: "できていない" };
+
+function replyChangeText(change: ReplyChange): string {
+  return change.same
+    ? `${change.name}は、ベンダーの返事でも${SAME_WORDS[change.status]}でした`
+    : `${change.name}は、${change.before}から、${change.after}に変わりました`;
+}
+
 type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[] };
 type TermExchange = { question: string; answer: string };
-type RecentReading = { viewpointId: string; status: keyof typeof STATUS_LABELS; reason: string };
+type RecentReading = { viewpointId: string; status: ViewpointStatus; reason: string };
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
 type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code";
 // 送る前に、この画面の中で縮めた写真。dataUrl は表示に、data（base64）は送信に使う
 type PreparedImage = { dataUrl: string; data: string; width: number; height: number };
-// 返事の検証で状態が変わった観点。結果の下に出して、何が変わったかを示す
-type ReplyChange = { viewpointId: string; name: string; before: keyof typeof STATUS_LABELS; after: keyof typeof STATUS_LABELS };
+// 返事の検証で状態か確認の出どころが変わった観点。結果の下に出して、何が変わったかを示す
+// 状態が同じで出どころだけ変わったときは same にし、矢印でなく「返事でも同じ」と示す
+type ReplyChange = { viewpointId: string; name: string; before: string; after: string; status: ViewpointStatus; same: boolean };
 
 // 通信が止まったときに、画面が「確認しています」のままにならないようにする
 const FETCH_TIMEOUT_MS = 90_000;
@@ -186,8 +189,13 @@ function verdictNote(card: Card, started: boolean): string {
       return started
         ? "まだ確かめていないことがあります。回答に応じて変わります。"
         : "去年のチェックリストの回答です。問診を始めると、回答に応じて変わります。";
-    case "confirmed_by_answer":
-      return "すべての観点が回答で確認できました。実地の確認ではありません。";
+    case "confirmed_by_answer": {
+      // 判定の名前は SPEC の4つのまま。返事で確かめた観点があるときは、この説明で出どころを示す
+      const replied = card.viewpoints.filter((viewpoint) => viewpoint.source === "reply").length;
+      if (replied === 0) return "すべての観点が回答で確認できました。実地の確認ではありません。";
+      const from = replied === card.viewpoints.length ? "ベンダーの返事" : "回答とベンダーの返事";
+      return `すべての観点が、${from}から、できていると分かりました。実地の確認ではありません。`;
+    }
     case "paper_only":
       return `${names(primary)}はできていますが、${parts.join("。")}。`;
     case "no":
@@ -326,7 +334,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         { viewpointId: event.viewpointId, status: event.status, reason: event.reason },
       ]);
       const name = event.card.viewpoints.find((viewpoint) => viewpoint.id === event.viewpointId)?.name;
-      setLive(`${name}：${STATUS_LABELS[event.status]}。${event.reason}`);
+      setLive(`${name}：${statusLabel(event.status)}。${event.reason}`);
     }
   }
 
@@ -727,12 +735,23 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       const checked: ReadResult[] = data.results;
       const nextCard: Card = data.card;
       setResults(checked);
-      // 返事で状態が変わった観点を集め、結果の下と判定カードの強調に使う
+      // 返事で状態か確認の出どころが変わった観点を集め、結果の下と判定カードの強調に使う
       const changes: ReplyChange[] = nextCard.viewpoints.flatMap((viewpoint) => {
-        const before = card.viewpoints.find((item) => item.id === viewpoint.id)?.status ?? "not_asked";
-        return before === viewpoint.status
+        const previous = card.viewpoints.find((item) => item.id === viewpoint.id);
+        const before = previous ? statusLabel(previous.status, previous.source) : statusLabel("not_asked");
+        const after = statusLabel(viewpoint.status, viewpoint.source);
+        return before === after
           ? []
-          : [{ viewpointId: viewpoint.id, name: viewpoint.name, before, after: viewpoint.status }];
+          : [
+              {
+                viewpointId: viewpoint.id,
+                name: viewpoint.name,
+                before,
+                after,
+                status: viewpoint.status,
+                same: previous?.status === viewpoint.status,
+              },
+            ];
       });
       setReplyChanges(changes);
       setReplyVerdict(card.label === nextCard.label ? null : { before: card.label, after: nextCard.label });
@@ -751,7 +770,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setRecent(
         changes.map((change) => ({
           viewpointId: change.viewpointId,
-          status: change.after,
+          status: change.status,
           reason: plainByViewpoint[change.viewpointId] ?? "",
         })),
       );
@@ -760,7 +779,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setLive(
         changes.length === 0
           ? "返事を読み取りました。観点の状態は変わりませんでした。"
-          : `返事を読み取りました。${changes.map((change) => `${change.name}は${STATUS_LABELS[change.after]}`).join("、")}。`,
+          : `返事を読み取りました。${changes.map(replyChangeText).join("。")}。`,
       );
       requestFocus("results");
     } catch {
@@ -1039,7 +1058,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 <li key={item.viewpointId}>
                   <span className="text-std-16B-170">
                     {card.viewpoints.find((viewpoint) => viewpoint.id === item.viewpointId)?.name}：
-                    {STATUS_LABELS[item.status]}
+                    {statusLabel(item.status)}
                   </span>
                   　{item.reason}
                 </li>
@@ -1343,7 +1362,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 {card.viewpoints.map((viewpoint) => (
                   <tr key={viewpoint.id} className="border-b border-solid-gray-200 align-top">
                     <th scope="row" className="py-2 pr-3 font-normal">{viewpoint.name}</th>
-                    <td className="py-2 pr-3">{STATUS_LABELS[viewpoint.status]}</td>
+                    <td className="py-2 pr-3">{statusLabel(viewpoint.status, viewpoint.source)}</td>
                     <td className="py-2">{reasons[viewpoint.id] ?? "―"}</td>
                   </tr>
                 ))}
@@ -1408,8 +1427,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               <div className="flex flex-col gap-2">
                 <h3 className="text-std-20B-150 text-solid-gray-900">1. ベンダーに質問文を送る</h3>
                 <p className="text-std-16N-170">次の文章を、メールなどでそのままベンダーへ送ってください。</p>
-                <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">{vendor.question}</p>
-                <button type="button" onClick={() => copyText(vendor.question, "question")} className={secondaryClass}>
+                <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">{vendorMessage(vendor, card)}</p>
+                <button type="button" onClick={() => copyText(vendorMessage(vendor, card), "question")} className={secondaryClass}>
                   {copied === "question" ? "コピーしました" : "質問文をコピーする"}
                 </button>
               </div>
@@ -1505,8 +1524,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                     <ul className="flex flex-col gap-1 text-std-16N-170">
                       {replyChanges.map((change) => (
                         <li key={change.viewpointId}>
-                          <span className="text-std-16B-170">{change.name}</span>：{STATUS_LABELS[change.before]} →{" "}
-                          {STATUS_LABELS[change.after]}
+                          <span className="text-std-16B-170">{change.name}</span>：
+                          {change.same ? `${SAME_WORDS[change.status]}。ベンダーの返事でも同じでした` : `${change.before} → ${change.after}`}
                         </li>
                       ))}
                     </ul>
@@ -1578,7 +1597,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 </p>
               )}
               <p className="text-std-16B-170">
-                {viewpoint.name}：{STATUS_LABELS[viewpoint.status]}
+                {viewpoint.name}：{statusLabel(viewpoint.status, viewpoint.source)}
               </p>
               {/* 観点名だけでは「取得」「切り離し」が伝わらないので、確かめたいことを添える */}
               <p className="text-std-16N-170 text-solid-gray-800">確かめたいこと：{viewpoint.goal}</p>

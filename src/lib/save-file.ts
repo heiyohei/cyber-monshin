@@ -15,6 +15,8 @@ const ItemResultSchema = z.object({
   lastYearAnswer: z.enum(["yes", "no", "unknown"]),
   vendorAnswer: z.enum(["yes", "no", "not_applicable", "no_item", "unknown"]),
   states: z.record(z.string().max(40), Status),
+  // 前の版のファイルにはないので、なくても読み込める
+  sources: z.record(z.string().max(40), z.enum(["answer", "reply"])).optional(),
   reasons: z.record(z.string().max(40), ShortText),
   summary: z.string().max(1000),
   vendorQuestions: z
@@ -56,6 +58,7 @@ export const SaveFileSchema = z
       keys.length === ids.length &&
       ids.every((id) => keys.includes(id)) &&
       Object.keys(result.reasons).every((id) => ids.includes(id)) &&
+      Object.keys(result.sources ?? {}).every((id) => ids.includes(id)) &&
       result.vendorQuestions.every((question) =>
         question.requirements.every((requirement) => ids.includes(requirement.viewpointId)),
       )
@@ -80,6 +83,9 @@ export function buildSaveFile(
         lastYearAnswer: session.lastYearAnswer,
         vendorAnswer: session.vendorAnswer,
         states: session.states,
+        sources: Object.fromEntries(
+          ids.flatMap((id) => (session.sources?.[id] ? [[id, session.sources[id]!] as const] : [])),
+        ),
         reasons: Object.fromEntries(ids.flatMap((id) => (reasons[id] ? [[id, reasons[id]!.slice(0, 300)]] : []))),
         summary: summary.slice(0, 1000),
         vendorQuestions: session.vendorQuestions,
@@ -97,6 +103,7 @@ export function sessionFromSaveFile(input: unknown): { session: InterviewSession
   const item = getItem(result.itemId)!;
   const session = createSession(item, result.lastYearAnswer, result.vendorAnswer);
   session.states = result.states;
+  session.sources = result.sources ?? {};
   session.vendorQuestions = result.vendorQuestions;
   session.finished = true;
   return { session, file: parsed.data };

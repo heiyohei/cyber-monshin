@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CLAUDE_PARAMS, client, type Usage } from "./claude.ts";
-import { applyResults, checkResults, type ReadResult } from "./quote.ts";
+import { applyResults, checkResults, decidedViewpoints, type ReadResult } from "./quote.ts";
 import type { VendorRequest } from "./session.ts";
 import type { ViewpointStates } from "./verdict.ts";
 
@@ -60,7 +60,7 @@ export async function verifyVendorReply(
   states: ViewpointStates,
   signal: AbortSignal,
   usage: Usage,
-): Promise<{ results: ReadResult[]; states: ViewpointStates }> {
+): Promise<{ results: ReadResult[]; states: ViewpointStates; decided: string[] }> {
   const { question, requirements } = request;
 
   const stream = client.beta.messages.stream(
@@ -113,5 +113,9 @@ export async function verifyVendorReply(
   }
 
   const results = checkResults(requirements, output.data.results, reply);
-  return { results, states: applyResults(states, requirements, results) };
+  return {
+    results,
+    states: applyResults(states, requirements, results),
+    decided: decidedViewpoints(requirements, results),
+  };
 }

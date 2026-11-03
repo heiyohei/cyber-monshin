@@ -226,8 +226,9 @@ function runReportViewpoint(block: ToolUse, session: InterviewSession, emit: Emi
 
   const before = computeVerdict(itemOf(session), session.states);
   session.states = { ...session.states, [viewpointId]: input.data.status };
+  session.sources = { ...session.sources, [viewpointId]: "answer" };
   const after = computeVerdict(itemOf(session), session.states);
-  const card = buildCard(itemOf(session), session.states, session.lastYearAnswer);
+  const card = buildCard(itemOf(session), session.states, session.lastYearAnswer, session.sources);
 
   emit({ type: "viewpoint_updated", viewpointId, status: input.data.status, reason: input.data.reason, card });
   if (before !== after) emit({ type: "verdict_updated", card });
@@ -357,7 +358,7 @@ export function giveUp(blocks: ToolUse[], results: ToolResult[], session: Interv
   if (viewpointId) {
     const before = computeVerdict(itemOf(session), session.states);
     session.states = { ...session.states, [viewpointId]: "unknown" };
-    const card = buildCard(itemOf(session), session.states, session.lastYearAnswer);
+    const card = buildCard(itemOf(session), session.states, session.lastYearAnswer, session.sources);
     const reason = "確かめられなかったので、わからないとして扱います。";
     emit({ type: "viewpoint_updated", viewpointId, status: "unknown", reason, card });
     if (before !== computeVerdict(itemOf(session), session.states)) emit({ type: "verdict_updated", card });

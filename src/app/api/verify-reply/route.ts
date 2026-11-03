@@ -3,6 +3,7 @@ import { getSessionSecret } from "@/lib/auth";
 import { buildCard } from "@/lib/card";
 import { apiErrorMessage, emptyUsage, logApiError, MAX_BODY_LENGTH } from "@/lib/claude";
 import { itemOf, openSession, sealSession, vendorRequestFor } from "@/lib/session";
+import { withReplySources } from "@/lib/quote";
 import { verifyVendorReply, VendorReplyStop } from "@/lib/vendor-reply";
 
 export const maxDuration = 120;
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
   const usage = emptyUsage();
   const startedAt = Date.now();
   try {
-    const { results, states } = await verifyVendorReply(
+    const { results, states, decided } = await verifyVendorReply(
       body.data.reply,
       vendorRequest,
       session.states,
@@ -50,9 +51,10 @@ export async function POST(request: Request) {
     );
     console.info("[verify-reply] 実測", { ...usage, ms: Date.now() - startedAt });
     session.states = states;
+    session.sources = withReplySources(session.sources, decided);
     return Response.json({
       results,
-      card: buildCard(itemOf(session), states, session.lastYearAnswer),
+      card: buildCard(itemOf(session), states, session.lastYearAnswer, session.sources),
       session: sealSession(session, secret),
     });
   } catch (error) {

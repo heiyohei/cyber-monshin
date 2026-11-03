@@ -1,4 +1,4 @@
-import type { Card } from "@/lib/card";
+import { statusLabel, type Card } from "@/lib/card";
 
 const STEP_GROUPS = [
   { key: "free", title: "今日から院内でできること" },
@@ -25,6 +25,13 @@ export function PrintSheet({ card }: { card: Card }) {
           チェック項目 {checkItem.no}：{checkItem.text}
         </p>
       ))}
+      {/* 1枚に収めるため、観点ごとの状態と確認の出どころは1段落にまとめる */}
+      <p>
+        確かめたこと：
+        {card.viewpoints
+          .map((viewpoint) => `${viewpoint.name}　${statusLabel(viewpoint.status, viewpoint.source)}`)
+          .join("／")}
+      </p>
 
       <h2 className="mt-4 text-[12pt] font-bold">このままだと診療が止まるおそれがあるところ</h2>
       {card.result.holeCount === 0 ? (

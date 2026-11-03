@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   applyResults,
   checkResults,
+  decidedViewpoints,
+  withReplySources,
   quoteExists,
   viewpointResult,
   type ReadResult,
@@ -78,4 +80,20 @@ test("検証：満たす、満たさない、曖昧を対応づけて状態を�
   const ambiguous = read("r_restore", "ambiguous", "復元の試験は未実施");
   const unchanged = applyResults(initialStates(BACKUP_ITEM), REQUIREMENTS, checkResults(REQUIREMENTS, [ambiguous], REPLY));
   assert.equal(unchanged.restore, "not_asked");
+});
+
+test("検証：返事で満たす、満たさないが決まった観点だけを、出どころが返事の観点にする", () => {
+  const met = read("r_acquire", "met", "毎日、夜間に取得");
+  const notMet = read("r_restore", "not_met", "復元の試験は未実施");
+  const ambiguous = read("r_restore", "ambiguous", "復元の試験は未実施");
+  assert.deepEqual(decidedViewpoints(REQUIREMENTS, checkResults(REQUIREMENTS, [met, notMet], REPLY)), ["acquire", "restore"]);
+  assert.deepEqual(decidedViewpoints(REQUIREMENTS, checkResults(REQUIREMENTS, [ambiguous], REPLY)), []);
+  const fake = read("r_acquire", "met", "毎週取得しています");
+  assert.deepEqual(decidedViewpoints(REQUIREMENTS, checkResults(REQUIREMENTS, [fake], REPLY)), []);
+});
+
+test("検証：返事で決まった観点だけ出どころを返事にし、ほかは回答のまま残す", () => {
+  const sources = withReplySources({ acquire: "answer", restore: "answer" }, ["restore"]);
+  assert.deepEqual(sources, { acquire: "answer", restore: "reply" });
+  assert.deepEqual(withReplySources(undefined, []), {});
 });

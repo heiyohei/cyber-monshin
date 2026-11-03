@@ -1,4 +1,4 @@
-import type { ViewpointStates } from "./verdict.ts";
+import type { ViewpointSources, ViewpointStates } from "./verdict.ts";
 
 export type RequirementResult = "met" | "not_met" | "ambiguous" | "no_answer";
 
@@ -56,6 +56,19 @@ export function viewpointResult(
   if (found.includes("not_met")) return "not_met";
   if (found.every((result) => result === "met")) return "met";
   return found.includes("ambiguous") ? "ambiguous" : "no_answer";
+}
+
+// 返事で「満たす」か「満たさない」が決まった観点。確認の出どころを「ベンダーの返事」にする
+export function decidedViewpoints(requirements: Requirement[], results: ReadResult[]): string[] {
+  return [...new Set(requirements.map((requirement) => requirement.viewpointId))].filter((viewpointId) => {
+    const result = viewpointResult(viewpointId, requirements, results);
+    return result === "met" || result === "not_met";
+  });
+}
+
+// 返事で決まらなかった観点は、前の出どころ（回答）のまま残す
+export function withReplySources(sources: ViewpointSources | undefined, decided: string[]): ViewpointSources {
+  return { ...sources, ...Object.fromEntries(decided.map((id) => [id, "reply" as const])) };
 }
 
 export function applyResults(

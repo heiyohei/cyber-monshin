@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { findItem } from "../data/items.ts";
 import type { FocusItem } from "../data/types.ts";
 import type { Requirement } from "./quote.ts";
-import { initialStates, type ViewpointStates } from "./verdict.ts";
+import { initialStates, type ViewpointSources, type ViewpointStates } from "./verdict.ts";
 import { sign, verify } from "./session-token.ts";
 
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
@@ -29,6 +29,8 @@ export type InterviewSession = {
   vendorAnswer: VendorAnswer;
   messages: Anthropic.Beta.BetaMessageParam[];
   states: ViewpointStates;
+  // 観点を回答で確かめたか、ベンダーの返事で確かめたか。表示だけに使う
+  sources?: ViewpointSources;
   answerCount: number;
   questionCount: number;
   validationErrors: number;
