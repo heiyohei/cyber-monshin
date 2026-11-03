@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   try {
     json = JSON.parse(text);
   } catch {
-    return fail(400, "送る内容の形が正しくありません。");
+    return fail(400, "うまく送れませんでした。画面を読み込み直して、もう一度お試しください。");
   }
   const body = BodySchema.safeParse(json);
   if (!body.success) return fail(400, "回答は1,000文字以内で入力してください。");
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   let session: InterviewSession | null;
   if (body.data.session) {
     session = openSession(body.data.session, secret);
-    if (!session) return fail(400, "問診の情報を確認できませんでした。最初からやり直してください。");
+    if (!session) return fail(400, "問診を始めてから時間がたったか、問診の情報を確かめられませんでした。最初からやり直すか、保存したファイルを読み込んでください。");
   } else {
     // 新しく始められるのは、公開している重点項目だけ
     const item = getItem(body.data.item_id);

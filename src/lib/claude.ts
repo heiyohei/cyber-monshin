@@ -21,11 +21,11 @@ export function emptyUsage(): Usage {
 }
 
 export function apiErrorMessage(error: unknown): string {
-  if (error instanceof Anthropic.AuthenticationError) return "サーバーの設定に問題があります。";
+  if (error instanceof Anthropic.AuthenticationError) return "このアプリの設定に問題があります。管理者に連絡してください。";
   if (error instanceof Anthropic.RateLimitError) return "混み合っています。少し待ってからやり直してください。";
-  if (error instanceof Anthropic.APIConnectionError) return "接続できませんでした。やり直してください。";
-  if (error instanceof Anthropic.APIError) return "処理に失敗しました。やり直してください。";
-  return "処理に失敗しました。やり直してください。";
+  if (error instanceof Anthropic.APIConnectionError) return "接続できませんでした。もう一度ボタンを押してください。";
+  if (error instanceof Anthropic.APIError) return "処理に失敗しました。もう一度ボタンを押してください。";
+  return "処理に失敗しました。もう一度ボタンを押してください。";
 }
 
 // 回答の本文を残さないよう、ログには種類と状態コードだけを出す。

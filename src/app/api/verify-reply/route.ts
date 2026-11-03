@@ -27,16 +27,16 @@ export async function POST(request: Request) {
   try {
     json = JSON.parse(text);
   } catch {
-    return fail(400, "送る内容の形が正しくありません。");
+    return fail(400, "うまく送れませんでした。画面を読み込み直して、もう一度お試しください。");
   }
   const body = BodySchema.safeParse(json);
   if (!body.success) return fail(400, "返事は4,000文字以内で貼り付けてください。");
 
   const session = openSession(body.data.session, secret);
-  if (!session) return fail(400, "問診の情報を確認できませんでした。最初からやり直してください。");
+  if (!session) return fail(400, "問診を始めてから時間がたったか、問診の情報を確かめられませんでした。最初からやり直すか、保存したファイルを読み込んでください。");
 
   const vendorRequest = vendorRequestFor(session);
-  if (!vendorRequest) return fail(400, "確かめる確認事項がありません。");
+  if (!vendorRequest) return fail(400, "ベンダーに聞くことがないため、返事を確かめる必要はありません。");
 
   const usage = emptyUsage();
   const startedAt = Date.now();

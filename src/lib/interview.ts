@@ -462,6 +462,6 @@ export async function runInterview(
       return;
     }
   }
-  emit({ type: "error", message: "処理の上限に達しました。「続ける」を押してください。" });
+  emit({ type: "error", message: "いったん区切ります。「続ける」を押すと、続きを確かめます。" });
   emit({ type: "can_continue" });
 }

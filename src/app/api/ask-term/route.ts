@@ -26,13 +26,13 @@ export async function POST(request: Request) {
   try {
     json = JSON.parse(text);
   } catch {
-    return fail(400, "送る内容の形が正しくありません。");
+    return fail(400, "うまく送れませんでした。画面を読み込み直して、もう一度お試しください。");
   }
   const body = BodySchema.safeParse(json);
   if (!body.success) return fail(400, `相談は${MAX_TERM_LENGTH}文字以内で入力してください。`);
 
   const session = openSession(body.data.session, secret);
-  if (!session) return fail(400, "問診の情報を確認できませんでした。最初からやり直してください。");
+  if (!session) return fail(400, "問診を始めてから時間がたったか、問診の情報を確かめられませんでした。最初からやり直すか、保存したファイルを読み込んでください。");
 
   // 回数は署名された状態で数えるので、ブラウザ側で書き換えられない
   const used = session.termCount ?? 0;

@@ -94,7 +94,7 @@ export async function verifyVendorReply(
   usage.cacheWrite += message.usage.cache_creation_input_tokens ?? 0;
 
   if (message.stop_reason === "refusal") {
-    throw new VendorReplyStop("この内容は処理できませんでした。");
+    throw new VendorReplyStop("この内容は処理できませんでした。言い方を変えて、もう一度お試しください。");
   }
   if (message.stop_reason === "max_tokens") {
     throw new VendorReplyStop("応答が長くなりすぎました。もう一度お試しください。");
