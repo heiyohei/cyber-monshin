@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Anthropic from "@anthropic-ai/sdk";
 import { giveUp, processToolUses, type InterviewEvent } from "./interview.ts";
+import { buildSaveFile, sessionFromSaveFile } from "./save-file.ts";
 import { createSession, vendorRequestFor } from "./session.ts";
 
 function tool(name: string, input: unknown, id = name): Anthropic.Beta.BetaToolUseBlock {
@@ -94,6 +95,30 @@ test("確認事項：すき間の種類が事業者の回答と合わないと�
   assert.equal(session.vendorQuestions[1].requirements[0].id, "q2_r1");
 });
 
+test("確認事項：保存ファイルで読み込めない長さや件数を拒否する", () => {
+  const { session, emit } = setup();
+  const requirement = { viewpoint_id: "restore", text: "戻す確認をした" };
+  const base = { item_id: "backup", gap_type: "no_item", concern: "不安", question: "質問文", requirements: [requirement] };
+  for (const input of [
+    { ...base, question: "長".repeat(1001) },
+    { ...base, concern: "長".repeat(301) },
+    { ...base, requirements: Array(5).fill(requirement) },
+    { ...base, requirements: [{ ...requirement, text: "長".repeat(201) }] },
+  ]) {
+    assert.equal(processToolUses([tool("add_vendor_question", input)], session, emit)[0].is_error, true);
+  }
+  assert.equal(session.vendorQuestions.length, 0);
+});
+
+test("確認事項と保存ファイル：受け付けた確認事項は保存して読み込める", () => {
+  const { session, emit } = setup();
+  const requirements = Array(4).fill({ viewpoint_id: "restore", text: "長".repeat(200) });
+  const input = { item_id: "backup", gap_type: "no_item", concern: "長".repeat(300), question: "長".repeat(1000), requirements };
+  assert.equal(processToolUses([tool("add_vendor_question", input)], session, emit)[0].is_error, undefined);
+  session.finished = true;
+  assert.ok(sessionFromSaveFile(JSON.parse(JSON.stringify(buildSaveFile(session, {}, "要約")))));
+});
+
 test("確認事項：存在しない観点を拒否する", () => {
   const { session, emit } = setup();
   assert.equal(processToolUses([vendor("no_item", "other")], session, emit)[0].is_error, true);
@@ -127,4 +152,7 @@ test("検証エラーが続いたら、その観点を「わからない」に�
   assert.equal(session.states.restore, "unknown");
   assert.equal(session.finished, true);
   assert.equal(events.some((event) => event.type === "error"), true);
+  // 止まっても結果の画面へ進める
+  const finished = events.find((event) => event.type === "item_finished");
+  assert.equal(finished?.type === "item_finished" && finished.vendor !== null, true);
 });

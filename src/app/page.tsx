@@ -32,7 +32,7 @@ export default function Home() {
 
       <footer className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4 text-dns-14N-130 text-solid-gray-800">
         <p>
-          出典：厚生労働省の次の資料をもとに作成しました（公共データ利用規約 第1.0版）。根拠の文は原文の引用で、質問、判定の基準、次の一手、言い換えは本アプリが加工したものです。
+          出典：厚生労働省の次の資料をもとに作成しました（公共データ利用規約 第1.0版）。根拠の文は原文の引用で、質問、判定の基準、次の一手、言い換えは本アプリが加工したものです。これらの内容は、アプリのコードのライセンス（MIT License）とは別に扱います。
         </p>
         <ul className="list-disc pl-5">
           {SOURCES.map((source) => (

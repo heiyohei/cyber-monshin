@@ -153,11 +153,12 @@ const ReportSchema = ItemSchema.extend({
   reason: z.string().min(1),
 });
 
+// 上限は保存ファイルの検証（save-file.ts）とそろえる。保存したものを読み込めなくならないように
 const VendorSchema = ItemSchema.extend({
   gap_type: z.enum(["not_applicable", "no_item", "outside"]),
-  concern: z.string().min(1),
-  question: z.string().min(1),
-  requirements: z.array(z.object({ viewpoint_id: z.string(), text: z.string().min(1) })),
+  concern: z.string().min(1).max(300),
+  question: z.string().min(1).max(1000),
+  requirements: z.array(z.object({ viewpoint_id: z.string(), text: z.string().min(1).max(200) })).max(4),
 });
 
 const FinishSchema = ItemSchema.extend({ summary: z.string().min(1) });
@@ -215,7 +216,12 @@ function runReportViewpoint(block: ToolUse, session: InterviewSession, emit: Emi
 
 function runAddVendorQuestion(block: ToolUse, session: InterviewSession, emit: Emit): ToolResult {
   const input = VendorSchema.safeParse(block.input);
-  if (!input.success) return toolError(block.id, BAD_INPUT);
+  if (!input.success) {
+    return toolError(
+      block.id,
+      "入力の形が正しくありません。不安は300字、質問文は1,000字、要件は200字までで、要件は4件までにしてください。",
+    );
+  }
   const { item_id, gap_type, concern, question, requirements } = input.data;
 
   if (item_id !== BACKUP_ITEM.id) return toolError(block.id, WRONG_ITEM);
@@ -331,7 +337,12 @@ export function giveUp(blocks: ToolUse[], results: ToolResult[], session: Interv
     if (before !== computeBackupVerdict(session.states)) emit({ type: "verdict_updated", card });
   }
   session.finished = true;
-  emit({ type: "error", message: "確認を続けられませんでした。根拠の説明をご覧ください。" });
+  emit({ type: "error", message: "確認を続けられませんでした。ここまでの内容で結果を示します。" });
+  emit({
+    type: "item_finished",
+    summary: "確認を続けられなかったため、確かめられなかった観点は「わからない」として扱いました。",
+    vendor: vendorRequestFor(session),
+  });
 }
 
 function applyAnswer(session: InterviewSession, answer: string) {
