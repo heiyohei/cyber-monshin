@@ -314,7 +314,9 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     element.focus({ preventScroll: true });
     // 次の質問の上には「直前の回答から読み取ったこと」が出るので、あればそこから見せる
     const top = focusTarget.target === "question" ? (recentRef.current ?? element) : element;
-    top.scrollIntoView({ block: focusTarget.target === "error" ? "center" : "start" });
+    // Excel の一覧の行から選んだときは、表が見えたまま最小限だけ動かす
+    const block = focusTarget.target === "error" ? "center" : focusTarget.target === "excel" ? "nearest" : "start";
+    top.scrollIntoView({ block });
   }, [focusTarget]);
 
   function handleEvent(event: ServerEvent) {
@@ -511,6 +513,11 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     setExcel(readings);
     // 読み終えた時点で選んでいる対策に入れる（待つ間に対策を変えていても、別の対策の回答を送らない）
     applyReading(readings, getItem(itemIdRef.current) ?? item);
+    // 焦点はファイルの欄に残るので、表が下に出たことを読み上げで伝える（同じ文が続くと読まれないことがある。同じファイルを選び直したときだけ）
+    const concerned = readings.filter((reading) => reading.concerns.length > 0).length;
+    setLive(
+      `Excel を読み取り、重点項目5つの去年の回答の一覧を下に出しました。気になる点がある対策は${concerned}つです。`,
+    );
   }
 
   function saveResult() {
@@ -1029,19 +1036,20 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                     <p className="text-std-16N-170">
                       「この対策を選ぶ」を押すと、下の欄にその対策の去年の回答とベンダーの回答が入ります。そのあと「この回答で問診を始める」を押します。
                     </p>
-                    <div className="overflow-x-auto">
+                    {/* 入れ物の左右に余白を取り、行のボタンの焦点の枠が切れないようにする */}
+                    <div className="-mx-2 overflow-x-auto px-2">
                       <table className="w-full border-collapse text-left text-std-16N-170">
                         <caption className="pb-2 text-left text-std-16B-170 text-solid-gray-900">
                           去年の回答の一覧（重点項目5つ）
                         </caption>
                         <thead>
                           <tr className="border-b-2 border-solid-gray-420">
-                            <th scope="col" className="w-[40%] py-2 pr-3 text-std-16B-170">
+                            <th scope="col" className="w-[40%] py-2 pr-3 pl-2 text-std-16B-170">
                               対策（攻撃の流れ、チェック項目）
                             </th>
                             <th scope="col" className="w-[13%] py-2 pr-3 text-std-16B-170">去年の回答</th>
                             <th scope="col" className="w-[19%] py-2 pr-3 text-std-16B-170">ベンダーの回答</th>
-                            <th scope="col" className="w-[28%] py-2 text-std-16B-170">気になる点</th>
+                            <th scope="col" className="w-[28%] py-2 pr-2 text-std-16B-170">気になる点</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1056,7 +1064,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                                 aria-current={chosen ? "true" : undefined}
                                 className={`border-b border-solid-gray-200 align-top ${chosen ? "bg-blue-50" : ""}`}
                               >
-                                <td className="py-3 pr-3">
+                                <td className="py-3 pr-3 pl-2">
                                   <div className="flex flex-col items-start gap-1">
                                     <span className="text-std-16B-170">{choice.name}</span>
                                     <span className="text-solid-gray-800">
@@ -1082,7 +1090,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                                 <td className={`py-3 pr-3 ${reading.vendor.status === "read" ? "whitespace-nowrap" : ""}`}>
                                   {vendorCellLabel(reading.vendor)}
                                 </td>
-                                <td className="py-3">
+                                <td className="py-3 pr-2">
                                   {reading.concerns.map((concern) => (
                                     <span key={concern} className="block">
                                       {CONCERN_TEXTS[concern]}
@@ -1101,8 +1109,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                   <div className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
                     <p ref={excelRef} tabIndex={-1} className="text-std-16N-170 focus-visible:focus-ring">
                       {excelCurrent.lastYear.status === "read"
-                        ? `${checkItemNumbers(item)} の去年の回答を読み取りました。違っていれば選び直してください。`
-                        : `${checkItemNumbers(item)} の回答を読み取れませんでした（要確認）。去年の回答を選んでください。`}
+                        ? `${item.name}（${checkItemNumbers(item)}）の去年の回答を読み取りました。違っていれば選び直してください。`
+                        : `${item.name}（${checkItemNumbers(item)}）の回答を読み取れませんでした（要確認）。去年の回答を選んでください。`}
                       {(excelCurrent.vendor.status === "ambiguous" || excelCurrent.vendor.status === "not_found") &&
                         "ベンダーの回答は読み取れませんでした（要確認）。下で選んでください。"}
                     </p>

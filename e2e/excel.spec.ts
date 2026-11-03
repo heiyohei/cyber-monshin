@@ -39,7 +39,9 @@ test("Excel の読み込み：去年の回答をブラウザの中で読み取�
   await page.getByLabel("Excel を読み込む").setInputFiles(path.join(samplesDir, hospitalFile!));
 
   // 既定の対策はバックアップと復旧（チェック項目 3-②）
-  await expect(page.getByText("3-② の去年の回答を読み取りました。違っていれば選び直してください。")).toBeVisible();
+  await expect(
+    page.getByText("バックアップと復旧（3-②）の去年の回答を読み取りました。違っていれば選び直してください。"),
+  ).toBeVisible();
   await expect(page.getByLabel("3-② の去年の回答")).toHaveValue(/^(yes|no)$/);
   await expect(page.getByRole("button", { name: "この回答で問診を始める" })).toBeVisible();
 
@@ -64,7 +66,9 @@ test("Excel の読み込み：去年の回答をブラウザの中で読み取�
   // 別の行の「この対策を選ぶ」を押すと、その対策が「確かめる対策」になり、選択欄の見出しがその番号に変わる。
   // Excel の読み取りは捨てないので、選び直しは要らない
   await chooseButton(page, "更新プログラム").click();
-  await expect(page.getByText("2-⑥ の去年の回答を読み取りました。違っていれば選び直してください。")).toBeFocused();
+  await expect(
+    page.getByText("更新プログラム（2-⑥）の去年の回答を読み取りました。違っていれば選び直してください。"),
+  ).toBeFocused();
   await expect(page.getByLabel("2-⑥ の去年の回答")).toHaveValue(/^(yes|no)$/);
   // 事業者用のシートを読み込んでいないので、ベンダーの回答は要確認
   await expect(page.getByLabel("事業者用チェックリスト 2-⑥ の、ベンダーの回答")).toHaveValue("unknown");
