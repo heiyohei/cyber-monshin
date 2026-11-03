@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyResults, checkResults, quoteExists, type ReadResult, type Requirement } from "./quote.ts";
+import {
+  applyResults,
+  checkResults,
+  quoteExists,
+  viewpointResult,
+  type ReadResult,
+  type Requirement,
+} from "./quote.ts";
 import { initialStates } from "./verdict.ts";
 
 const REPLY = "バックアップは毎日、夜間に取得しています。\n復元の試験は未実施です。ＮＡＳに保存しています。";
@@ -35,6 +42,23 @@ test("検証：偽の引用は「回答なし」に直り、観点の状態を�
 test("検証：読み取りが返らなかった要件は「回答なし」になる", () => {
   const checked = checkResults(REQUIREMENTS, [], REPLY);
   assert.deepEqual(checked.map((item) => item.result), ["no_answer", "no_answer"]);
+});
+
+test("検証：同じ観点の要件が複数あれば、甘くならない側にまとめる", () => {
+  const twice: Requirement[] = [
+    { id: "a", viewpointId: "restore", text: "戻したことがある", followUp: "" },
+    { id: "b", viewpointId: "restore", text: "1年以内に戻した", followUp: "" },
+  ];
+  const states = (first: ReadResult["result"], second: ReadResult["result"]) =>
+    applyResults(initialStates(), twice, [read("a", first, ""), read("b", second, "")]).restore;
+
+  assert.equal(states("not_met", "met"), "denied");
+  assert.equal(states("met", "not_met"), "denied");
+  assert.equal(states("met", "ambiguous"), "not_asked");
+  assert.equal(states("met", "no_answer"), "not_asked");
+  assert.equal(states("met", "met"), "confirmed");
+  assert.equal(viewpointResult("restore", twice, [read("a", "met", "")]), "no_answer");
+  assert.equal(viewpointResult("isolate", twice, []), null);
 });
 
 test("検証：満たされない要件には、追加の質問が必ず付く", () => {

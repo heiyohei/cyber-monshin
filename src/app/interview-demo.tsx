@@ -178,14 +178,18 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
       }
       const data = await response.json();
       const checked: ReadResult[] = data.results;
+      const nextCard: Card = data.card;
       setResults(checked);
-      setCard(data.card);
+      setCard(nextCard);
       // 状態が変わった観点は、前の回答の理由を返事の読み取りに置き換える
       setReasons((current) => {
         const next = { ...current };
         for (const result of checked) {
           const viewpointId = vendor?.requirements.find((item) => item.id === result.requirement_id)?.viewpointId;
-          if (viewpointId && (result.result === "met" || result.result === "not_met")) {
+          const status = nextCard.viewpoints.find((item) => item.id === viewpointId)?.status;
+          const changed =
+            (result.result === "met" && status === "confirmed") || (result.result === "not_met" && status === "denied");
+          if (viewpointId && changed) {
             next[viewpointId] = result.plain;
           }
         }

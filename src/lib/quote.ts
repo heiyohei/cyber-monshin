@@ -42,16 +42,32 @@ export function checkResults(
   });
 }
 
+// 1つの観点に要件が複数あるときは、甘くならない側にまとめる。
+// 1つでも満たさなければ「満たさない」、すべて満たすときだけ「満たす」
+export function viewpointResult(
+  viewpointId: ViewpointId,
+  requirements: Requirement[],
+  results: ReadResult[],
+): RequirementResult | null {
+  const found = requirements
+    .filter((requirement) => requirement.viewpointId === viewpointId)
+    .map((requirement) => results.find((item) => item.requirement_id === requirement.id)?.result ?? "no_answer");
+  if (found.length === 0) return null;
+  if (found.includes("not_met")) return "not_met";
+  if (found.every((result) => result === "met")) return "met";
+  return found.includes("ambiguous") ? "ambiguous" : "no_answer";
+}
+
 export function applyResults(
   states: ViewpointStates,
   requirements: Requirement[],
   results: ReadResult[],
 ): ViewpointStates {
   const next = { ...states };
-  for (const requirement of requirements) {
-    const result = results.find((item) => item.requirement_id === requirement.id)?.result;
-    if (result === "met") next[requirement.viewpointId] = "confirmed";
-    if (result === "not_met") next[requirement.viewpointId] = "denied";
+  for (const viewpointId of new Set(requirements.map((requirement) => requirement.viewpointId))) {
+    const result = viewpointResult(viewpointId, requirements, results);
+    if (result === "met") next[viewpointId] = "confirmed";
+    if (result === "not_met") next[viewpointId] = "denied";
   }
   return next;
 }
