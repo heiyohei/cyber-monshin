@@ -1,4 +1,4 @@
-import { BACKUP_ITEM } from "@/data/backup";
+import { BACKUP_ITEM } from "../data/backup.ts";
 import { computeBackupVerdict, VERDICT_LABELS, type Verdict, type ViewpointId, type ViewpointStates, type ViewpointStatus } from "./verdict.ts";
 
 export type Card = {

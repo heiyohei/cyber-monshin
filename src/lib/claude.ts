@@ -14,6 +14,12 @@ export const CLAUDE_PARAMS = {
 export const MAX_CALLS_PER_REQUEST = 6;
 export const MAX_BODY_LENGTH = 256_000;
 
+export type Usage = { calls: number; input: number; output: number; cacheRead: number; cacheWrite: number };
+
+export function emptyUsage(): Usage {
+  return { calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+}
+
 export function apiErrorMessage(error: unknown): string {
   if (error instanceof Anthropic.AuthenticationError) return "サーバーの設定に問題があります。";
   if (error instanceof Anthropic.RateLimitError) return "混み合っています。少し待ってからやり直してください。";

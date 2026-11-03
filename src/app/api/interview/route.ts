@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getSessionSecret } from "@/lib/auth";
-import { apiErrorMessage, logApiError, MAX_BODY_LENGTH } from "@/lib/claude";
+import { apiErrorMessage, emptyUsage, logApiError, MAX_BODY_LENGTH } from "@/lib/claude";
 import { InterviewStop, runInterview, type InterviewEvent } from "@/lib/interview";
 import { createSession, openSession, sealSession, type InterviewSession } from "@/lib/session";
 
@@ -48,8 +48,10 @@ export async function POST(request: Request) {
       const send = (event: InterviewEvent | { type: "session"; session: ReturnType<typeof sealSession> }) => {
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       };
+      const usage = emptyUsage();
+      const startedAt = Date.now();
       try {
-        await runInterview(current, body.data.answer, send, request.signal);
+        await runInterview(current, body.data.answer, send, request.signal, usage);
         send({ type: "session", session: sealSession(current, secret) });
       } catch (error) {
         if (error instanceof InterviewStop) {
@@ -59,6 +61,8 @@ export async function POST(request: Request) {
           send({ type: "error", message: apiErrorMessage(error) });
         }
       } finally {
+        // 回答の本文は出さず、回数とトークン数だけを残す
+        console.info("[interview] 実測", { ...usage, ms: Date.now() - startedAt });
         controller.close();
       }
     },

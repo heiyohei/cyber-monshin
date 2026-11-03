@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { getSessionSecret } from "@/lib/auth";
 import { buildCard } from "@/lib/card";
-import { apiErrorMessage, logApiError, MAX_BODY_LENGTH } from "@/lib/claude";
-import { openSession, sealSession } from "@/lib/session";
+import { apiErrorMessage, emptyUsage, logApiError, MAX_BODY_LENGTH } from "@/lib/claude";
+import { openSession, sealSession, vendorRequestFor } from "@/lib/session";
 import { verifyVendorReply, VendorReplyStop } from "@/lib/vendor-reply";
 
 export const maxDuration = 120;
@@ -35,8 +35,20 @@ export async function POST(request: Request) {
   const session = openSession(body.data.session, secret);
   if (!session) return fail(400, "問診の情報を確認できませんでした。最初からやり直してください。");
 
+  const vendorRequest = vendorRequestFor(session);
+  if (!vendorRequest) return fail(400, "確かめる確認事項がありません。");
+
+  const usage = emptyUsage();
+  const startedAt = Date.now();
   try {
-    const { results, states } = await verifyVendorReply(body.data.reply, session.states, request.signal);
+    const { results, states } = await verifyVendorReply(
+      body.data.reply,
+      vendorRequest,
+      session.states,
+      request.signal,
+      usage,
+    );
+    console.info("[verify-reply] 実測", { ...usage, ms: Date.now() - startedAt });
     session.states = states;
     return Response.json({
       results,
