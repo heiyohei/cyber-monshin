@@ -11,6 +11,7 @@ import { initialStates } from "@/lib/verdict";
 import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
 import type { ReadResult } from "@/lib/quote";
+import type { ImageReading } from "@/lib/read-image";
 import { buildSaveFile } from "@/lib/save-file";
 import type { InterviewSession, LastYearAnswer, SealedSession, VendorAnswer, VendorRequest } from "@/lib/session";
 
@@ -37,8 +38,9 @@ const fieldClass =
   "w-full rounded-8 border border-solid-gray-600 bg-white p-4 text-std-16N-170 text-solid-gray-900 placeholder:text-solid-gray-600 hover:border-black focus-visible:focus-ring";
 const labelClass = "text-std-16B-170 text-solid-gray-800";
 const panelClass = "rounded-12 border border-solid-gray-200 bg-white p-6";
+// 押せないときは灰色にする。ラベルで包んだファイルの欄は has-[:disabled] で同じ見た目にする
 const secondaryClass =
-  "min-h-11 w-fit rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring has-[:focus-visible]:focus-ring";
+  "min-h-11 w-fit rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring has-[:focus-visible]:focus-ring disabled:cursor-not-allowed disabled:border-solid-gray-300 disabled:bg-solid-gray-300 disabled:text-solid-gray-800 disabled:no-underline has-[:disabled]:cursor-not-allowed has-[:disabled]:border-solid-gray-300 has-[:disabled]:bg-solid-gray-300 has-[:disabled]:text-solid-gray-800 has-[:disabled]:no-underline";
 
 const STEP_GROUPS = [
   { key: "free", title: "今日から院内でできること" },
@@ -50,12 +52,48 @@ type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[
 type TermExchange = { question: string; answer: string };
 type RecentReading = { viewpointId: string; status: keyof typeof STATUS_LABELS; reason: string };
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
-type FocusTarget = "question" | "summary" | "reply" | "results" | "error";
+type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image";
+// 送る前に、この画面の中で縮めた写真。dataUrl は表示に、data（base64）は送信に使う
+type PreparedImage = { dataUrl: string; data: string; width: number; height: number };
 // 返事の検証で状態が変わった観点。結果の下に出して、何が変わったかを示す
 type ReplyChange = { viewpointId: string; name: string; before: keyof typeof STATUS_LABELS; after: keyof typeof STATUS_LABELS };
 
 // 通信が止まったときに、画面が「確認しています」のままにならないようにする
 const FETCH_TIMEOUT_MS = 90_000;
+
+// 写真や画面で答える。元のファイルは5MBまで、長い辺を 1568px に縮めた JPEG にして送る
+const IMAGE_MAX_FILE_BYTES = 5_000_000;
+const IMAGE_MAX_SIDE = 1568;
+// 縮めたあとの base64 の上限。サーバー（src/lib/read-image.ts）と同じ値にして、送る前に止める
+const IMAGE_MAX_DATA_LENGTH = 2_400_000;
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+// ブラウザの中で縮めて JPEG にする。描き直すので、撮影した場所などの付属情報は残らない
+async function shrinkImage(file: File): Promise<PreparedImage> {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("画像を開けませんでした"));
+      element.src = url;
+    });
+    const scale = Math.min(1, IMAGE_MAX_SIDE / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("画像を描けませんでした");
+    // 透明な部分がある PNG は、黒くならないよう白い背景にする
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    return { dataUrl, data: dataUrl.slice(dataUrl.indexOf(",") + 1), width: canvas.width, height: canvas.height };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 function WarningBox({
   warning,
@@ -190,6 +228,14 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [terms, setTerms] = useState<TermExchange[]>([]);
   const [termRemaining, setTermRemaining] = useState<number | null>(null);
   const [termBusy, setTermBusy] = useState(false);
+  // 写真や画面で答える。読み取りは回答の下書きを作るだけで、判定は回答から決まる
+  const [preparedImage, setPreparedImage] = useState<PreparedImage | null>(null);
+  const [imageReading, setImageReading] = useState<ImageReading | null>(null);
+  const [imageRemaining, setImageRemaining] = useState<number | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  // 同じ文を続けて出しても読み上げられるよう、番号を付けて部品を作り直す
+  const [imageNotice, setImageNotice] = useState<{ seq: number; text: string } | null>(null);
+  const [imageOpen, setImageOpen] = useState(false);
   const [excel, setExcel] = useState<ExcelReading | null>(null);
   const [excelNotice, setExcelNotice] = useState("");
   const [excelAnswer, setExcelAnswer] = useState<LastYearAnswer>("unknown");
@@ -207,6 +253,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const resultsRef = useRef<HTMLHeadingElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const answerRef = useRef<HTMLTextAreaElement>(null);
+  const imageRef = useRef<HTMLHeadingElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   function requestFocus(target: FocusTarget) {
     // 同じ先に続けて移すときも効くよう、番号を進める
@@ -216,7 +264,14 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   // 画面が切り替わってから焦点を移す。見出しに移せば、次に何をするかが読み上げでも分かる
   useEffect(() => {
     if (!focusTarget) return;
-    const refs = { question: questionRef, summary: summaryRef, reply: replyRef, results: resultsRef, error: errorRef };
+    const refs = {
+      question: questionRef,
+      summary: summaryRef,
+      reply: replyRef,
+      results: resultsRef,
+      error: errorRef,
+      image: imageRef,
+    };
     const element = refs[focusTarget.target].current;
     if (!element) return;
     element.focus({ preventScroll: true });
@@ -228,6 +283,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   function handleEvent(event: ServerEvent) {
     if (event.type === "question") {
       setQuestion(event);
+      // 写真の読み取りは前の質問に対するものなので、次の質問では消す
+      setPreparedImage(null);
+      setImageReading(null);
+      setImageNotice(null);
       requestFocus("question");
     }
     if (event.type === "message") setNote(event.text);
@@ -478,6 +537,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   }
 
   async function sendAnswer(checked: boolean) {
+    // 注意の欄の「このまま送る」からも来るので、写真やことばの相談の応答を待っている間は送らない
+    if (termBusy || imageBusy) return;
     if (!checked && needsPersonalInfoCheck(answer, "answer")) return;
     setWarning(null);
     const sent = await sendInterview({ session, answer });
@@ -497,7 +558,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
 
   // ことばの相談。判定には使わず、問診の流れとも分けて持つ
   async function sendTerm(checked: boolean) {
-    if (!session || !termInput.trim()) return;
+    if (!session || !termInput.trim() || imageBusy) return;
     if (!checked && needsPersonalInfoCheck(termInput, "term")) return;
     setWarning(null);
     setTermBusy(true);
@@ -524,6 +585,81 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   async function submitTerm(event: FormEvent) {
     event.preventDefault();
     await sendTerm(false);
+  }
+
+  function showImageNotice(text: string) {
+    setImageNotice((current) => ({ seq: (current?.seq ?? 0) + 1, text }));
+  }
+
+  // 写真はブラウザの中で縮め、内容を見てもらってから送る。元のファイルは送らない
+  async function chooseImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImageNotice(null);
+    setImageReading(null);
+    // 前と同じ文でも読み上げられるよう、いったん空にしてから入れる
+    setLive("");
+    if (!IMAGE_TYPES.includes(file.type)) {
+      showImageNotice("PNG、JPEG、WebP の画像を選んでください。スマートフォンの写真は、JPEG で保存し直すと選べます。");
+      return;
+    }
+    if (file.size > IMAGE_MAX_FILE_BYTES) {
+      showImageNotice("画像は5MBまでです。画面の一部だけを保存するか、別の画像を選んでください。");
+      return;
+    }
+    try {
+      const prepared = await shrinkImage(file);
+      if (prepared.data.length > IMAGE_MAX_DATA_LENGTH) {
+        showImageNotice("画像が大きすぎます。画面の一部だけを保存した画像か、別の写真を選んでください。");
+        return;
+      }
+      setPreparedImage(prepared);
+      setLive("写真を縮めました。写り込みがないか確かめて、「この写真を AI に送って読み取る」を押してください。");
+    } catch {
+      showImageNotice("この画像を開けませんでした。別の画像を選んでください。");
+    }
+  }
+
+  // ことばの相談と同時に送ると、あとに届いた状態が先の回数を消すので、どちらかが動いている間は送らない
+  async function sendImage() {
+    if (!session || !preparedImage || termBusy) return;
+    setImageBusy(true);
+    setError("");
+    setLive("写真を読み取っています。10秒ほどかかります…");
+    try {
+      const response = await postJson(
+        "/api/read-image",
+        JSON.stringify({ session, image: { media_type: "image/jpeg", data: preparedImage.data } }),
+      );
+      if (!response.ok) {
+        await failFrom(response);
+        return;
+      }
+      const data = await response.json();
+      const reading: ImageReading = data.reading;
+      setImageReading(reading);
+      setImageRemaining(data.remaining);
+      setSession(data.session);
+      setPreparedImage(null);
+      // 待っている間にたたまれていても、結果が見えるように開いてから焦点を移す
+      setImageOpen(true);
+      setLive(`写真を読み取りました。写っているもの：${reading.subject}`);
+      requestFocus("image");
+    } catch {
+      showError(CONNECTION_ERROR);
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
+  // 下書きは回答欄に入れるだけ。担当者が直してから「回答する」で送る
+  function useDraft() {
+    if (!imageReading?.draft) return;
+    const draft = imageReading.draft;
+    setAnswer((current) => (current.trim() ? `${current}\n${draft}` : draft).slice(0, 1000));
+    setLive("下書きを回答欄に入れました。直してから「回答する」を押してください。");
+    answerRef.current?.focus();
   }
 
   async function submitCode(event: FormEvent) {
@@ -858,6 +994,166 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 ))}
               </div>
             )}
+            {item.photoHints && (
+              <details
+                open={imageOpen}
+                onToggle={(event) => setImageOpen(event.currentTarget.open)}
+                className="rounded-8 border border-solid-gray-200 p-3"
+              >
+                <summary className="cursor-pointer text-std-16B-170 text-blue-900 underline focus-visible:focus-ring">
+                  写真や画面で答える（言葉で説明しにくいとき）
+                </summary>
+                <div className="mt-3 flex flex-col gap-3 text-std-16N-170">
+                  <p>
+                    写真や、画面を撮った画像を AI
+                    に送ると、写っているものと読めた文字を書き出して、回答の下書きを作ります。下書きは自分で直してから「回答する」を押してください。写真は判定に使いません。判定に使うのは、「回答する」で送った文章だけです。
+                  </p>
+                  <div>
+                    <p className="text-std-16B-170">たとえば、こんな写真や画面</p>
+                    <ul className="list-disc pl-6">
+                      {item.photoHints.map((hint) => (
+                        <li key={hint}>{hint}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-8 border-2 border-warning-yellow-1 bg-white p-3">
+                    <p className="text-std-16B-170">送る前に確かめること</p>
+                    <ul className="list-disc pl-6">
+                      <li>電子カルテなど、患者さんの情報が映る画面は送らないでください</li>
+                      <li>パスワードを書いた紙や付箋は、隠してから撮ってください</li>
+                      <li>機器の番号（IP アドレス）、ログインの名前、職員の名前、病院名が写っていれば、隠してください</li>
+                    </ul>
+                  </div>
+                  <p className="text-solid-gray-800">
+                    送る前に、お使いのパソコンの中で写真を縮めます。縮めるときに作り直すので、撮影した場所などの情報は残りません。
+                    <br />
+                    写真は1回の問診で5枚までです{imageRemaining !== null && `（あと${imageRemaining}枚）`}。
+                  </p>
+                  {imageRemaining === 0 ? (
+                    <p className="text-std-16B-170">5枚を使い切りました。続きは言葉で答えてください。</p>
+                  ) : (
+                    <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
+                      写真や画面を選ぶ（PNG、JPEG、WebP。1つ5MBまで）
+                      <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={chooseImage}
+                        disabled={imageBusy || termBusy}
+                        className="sr-only"
+                      />
+                    </label>
+                  )}
+                  {imageNotice && (
+                    <p key={imageNotice.seq} role="alert" className="text-std-16B-170 text-error-1">
+                      {imageNotice.text}
+                    </p>
+                  )}
+                  {preparedImage && (
+                    <div className="flex flex-col gap-3 rounded-8 bg-solid-gray-50 p-4">
+                      {/* 縮めた写真をそのまま見せる。ブラウザの中で作った画像なので next/image は使わない */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={preparedImage.dataUrl}
+                        alt="送る写真の縮小表示"
+                        className="max-h-64 max-w-full rounded-8 border border-solid-gray-420 bg-white object-contain"
+                      />
+                      <p>この写真を AI に送ります。パスワードや患者さんの情報が写っていないか、もう一度見てください。</p>
+                      <details className="text-solid-gray-800">
+                        <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">AI に送る内容</summary>
+                        <p className="mt-2 rounded-8 bg-white p-4">
+                          上の縮めた写真と、今の質問、確かめる対策の名前と確かめたいことを送ります。これまでの回答、病院名、読み込んだファイルは送りません。送った写真はこのサイトに保存しません。回答を送るときは、これまでの質問と回答も一緒に送ります。
+                        </p>
+                      </details>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={sendImage} disabled={imageBusy || termBusy} className={buttonClass}>
+                          {imageBusy ? "読み取っています…" : "この写真を AI に送って読み取る"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPreparedImage(null);
+                            // 押したボタンごと消えるので、焦点をファイルを選ぶ欄へ戻す
+                            imageInputRef.current?.focus();
+                          }}
+                          disabled={imageBusy}
+                          className={secondaryClass}
+                        >
+                          選び直す
+                        </button>
+                      </div>
+                      {imageBusy && <p className="text-solid-gray-800">写真を読み取っています。10秒ほどかかります…</p>}
+                    </div>
+                  )}
+                  {imageReading && (
+                    <section
+                      aria-labelledby="image-reading-heading"
+                      className="flex flex-col gap-3 rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4 break-words"
+                    >
+                      <h3
+                        id="image-reading-heading"
+                        ref={imageRef}
+                        tabIndex={-1}
+                        className="text-std-18B-160 text-blue-900 focus-visible:focus-ring"
+                      >
+                        写真から読めたこと（判定には使いません）
+                      </h3>
+                      <p>
+                        <span className="text-std-16B-170">写っているもの：</span>
+                        {imageReading.subject}
+                      </p>
+                      {imageReading.readings.length > 0 && (
+                        <div>
+                          <p className="text-std-16B-170">読めた文字や、画面や機器の様子</p>
+                          <ul className="list-disc pl-6">
+                            {imageReading.readings.map((text) => (
+                              <li key={text}>{text}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {imageReading.unknowns.length > 0 && (
+                        <div>
+                          <p className="text-std-16B-170">この写真からは分からないこと</p>
+                          <ul className="list-disc pl-6">
+                            {imageReading.unknowns.map((text) => (
+                              <li key={text}>{text}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {imageReading.cautions.length > 0 && (
+                        <div className="rounded-8 border-2 border-warning-yellow-1 bg-white p-3">
+                          <p className="text-std-16B-170">写り込んでいた、送るべきでなかったもの</p>
+                          <ul className="list-disc pl-6">
+                            {imageReading.cautions.map((text) => (
+                              <li key={text}>{text}</li>
+                            ))}
+                          </ul>
+                          <p className="mt-2">次に写真を選ぶときは、隠してから撮り直してください。</p>
+                        </div>
+                      )}
+                      {imageReading.draft ? (
+                        <div className="flex flex-col gap-2">
+                          <p className="text-std-16B-170">回答の下書き</p>
+                          <p className="whitespace-pre-wrap rounded-8 bg-white p-3">{imageReading.draft}</p>
+                          <button type="button" onClick={useDraft} className={secondaryClass}>
+                            回答欄に入れる
+                          </button>
+                        </div>
+                      ) : (
+                        <p>
+                          この写真は質問と関係がないか、必要なことが読み取れませんでした。言葉で答えるか、別の写真を選んでください。
+                        </p>
+                      )}
+                      <p className="text-solid-gray-800">
+                        AI が読んだ内容なので、読み違いがあるかもしれません。下書きは直してから送ってください。判定は、「回答する」で送った回答から決まります。
+                      </p>
+                    </section>
+                  )}
+                </div>
+              </details>
+            )}
             <label htmlFor="answer" className={labelClass}>
               回答（1,000文字まで。病院名、担当者名、IP アドレスは書かないでください）
             </label>
@@ -877,7 +1173,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
             )}
             <SentContent label="回答" text={answer} />
-            <button type="submit" disabled={!answer.trim() || termBusy} className={buttonClass}>
+            <button type="submit" disabled={!answer.trim() || termBusy || imageBusy} className={buttonClass}>
               回答する
             </button>
           </form>
@@ -920,7 +1216,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
             )}
             <button
               type="submit"
-              disabled={!termInput.trim() || termBusy || termRemaining === 0}
+              disabled={!termInput.trim() || termBusy || imageBusy || termRemaining === 0}
               className={secondaryClass}
             >
               {termBusy ? "調べています…" : "聞く"}
