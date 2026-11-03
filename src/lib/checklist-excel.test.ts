@@ -104,7 +104,7 @@ function hospitalRows(answers: Record<string, (string | null)[]>): (string | nul
   return Object.entries(ROWS).flatMap(([id, texts]) => texts.map((text, i) => ["2", text, id in answers ? answers[id][i] : "はい"]));
 }
 
-test("Excel：5項目をまとめて読み、並びは ITEMS の順。気になる点は固定の3つだけ", () => {
+test("Excel：5項目をまとめて読み、並びは ITEMS の順。気になる点は固定の文だけ", () => {
   const sheets: SheetRows[] = [
     { sheet: "医療機関確認用", data: hospitalRows({ accounts: ["はい", "はい", "いいえ", "はい", "はい"], continuity: ["はい", null] }) },
     {
@@ -155,7 +155,7 @@ test("Excel：5項目をまとめて読み、並びは ITEMS の順。気にな�
     itemId: "continuity",
     lastYear: { status: "ambiguous", answer: "unknown" },
     vendor: { status: "read", answer: "yes" },
-    concerns: ["unreadable"],
+    concerns: ["last_year_unreadable"],
   });
 });
 
@@ -178,16 +178,28 @@ test("Excel：読み取れない項目とベンダーの対象外が重なれば
   ];
   const byId = Object.fromEntries(readAllItems(ITEMS, sheets).map((reading) => [reading.itemId, reading]));
   assert.deepEqual(byId.update.lastYear, { status: "not_found", answer: "unknown" });
-  assert.deepEqual(byId.update.concerns, ["vendor_not_applicable", "unreadable"]);
+  assert.deepEqual(byId.update.concerns, ["vendor_not_applicable", "last_year_unreadable"]);
   // 事業者用の行はあるが回答が空なら、ベンダーの回答が読み取れなかったとして気になる点に出す
   assert.deepEqual(byId.devices.vendor, { status: "ambiguous", answer: "unknown" });
-  assert.deepEqual(byId.devices.concerns, ["unreadable"]);
+  assert.deepEqual(byId.devices.concerns, ["vendor_unreadable"]);
 
   const empty = readAllItems(ITEMS, []);
   assert.equal(empty.length, 5);
   for (const reading of empty) {
     assert.deepEqual(reading.lastYear, { status: "not_found", answer: "unknown" });
-    assert.deepEqual(reading.concerns, ["unreadable"]);
+    assert.deepEqual(reading.concerns, ["last_year_unreadable"]);
     assert.equal(reading.vendor.status, reading.itemId === "backup" ? "no_item" : "no_sheet");
   }
+});
+
+test("Excel：セルの文字が「constructor」などの受け継いだ名前でも、回答として拾わない", () => {
+  const sheets: SheetRows[] = [
+    { sheet: "医療機関確認用", data: [["2", PATCH, "constructor"], ["3", R8, "ｔｏＳｔｒｉｎｇ"]] },
+    { sheet: "事業者確認用", data: [["2", PATCH, "__proto__"]] },
+  ];
+  assert.deepEqual(readItemAnswer(UPDATE_ITEM, sheets), { status: "ambiguous", answer: "unknown" });
+  assert.deepEqual(readItemAnswer(BACKUP_ITEM, sheets), { status: "ambiguous", answer: "unknown" });
+  assert.deepEqual(readVendorAnswer(UPDATE_ITEM, sheets), { status: "ambiguous", answer: "unknown" });
+  const byId = Object.fromEntries(readAllItems(ITEMS, sheets).map((reading) => [reading.itemId, reading]));
+  assert.deepEqual(byId.update.concerns, ["last_year_unreadable", "vendor_unreadable"]);
 });
