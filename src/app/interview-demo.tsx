@@ -201,6 +201,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [live, setLive] = useState("");
   const [focusTarget, setFocusTarget] = useState<{ target: FocusTarget; seq: number } | null>(null);
   const questionRef = useRef<HTMLHeadingElement>(null);
+  const recentRef = useRef<HTMLElement>(null);
   const summaryRef = useRef<HTMLHeadingElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const resultsRef = useRef<HTMLHeadingElement>(null);
@@ -219,7 +220,9 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     const element = refs[focusTarget.target].current;
     if (!element) return;
     element.focus({ preventScroll: true });
-    element.scrollIntoView({ block: focusTarget.target === "error" ? "center" : "start" });
+    // 次の質問の上には「直前の回答から読み取ったこと」が出るので、あればそこから見せる
+    const top = focusTarget.target === "question" ? (recentRef.current ?? element) : element;
+    top.scrollIntoView({ block: focusTarget.target === "error" ? "center" : "start" });
   }, [focusTarget]);
 
   function handleEvent(event: ServerEvent) {
@@ -802,6 +805,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
 
         {session && !finished && (recent.length > 0 || verdictChange) && !busy && (
           <section
+            ref={recentRef}
             aria-label="直前の回答から読み取ったこと"
             className="flex flex-col gap-2 rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4"
           >
