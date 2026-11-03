@@ -68,13 +68,22 @@ export type VendorReading =
   | { status: "no_sheet"; answer: "unknown" };
 
 // 気になる点。画面には固定の短い文（CONCERN_TEXTS）を出す
-export type Concern = "last_year_no" | "vendor_not_applicable" | "last_year_unreadable" | "vendor_unreadable";
+export type Concern =
+  | "last_year_no"
+  | "vendor_not_applicable"
+  | "mismatch_yes_no"
+  | "last_year_unreadable"
+  | "vendor_unreadable";
 
 // チェック項目が複数の対策は、1つでも「いいえ」なら「いいえ」になるので、「いいえ」があります、と言う。
-// 「対象外」は事業者が対象外にした項目（病院の責任になる。SPEC の「対象外」のすき間）。誰が行うかは言い切らず、確かめてもらう
+// 「対象外」は事業者が対象外にした項目（病院の責任になる。SPEC の「対象外」のすき間）。誰が行うかは言い切らず、確かめてもらう。
+// 去年「はい」でベンダー「いいえ」は、事実だけを言い、どちらが合っているかを言わない（病院もベンダーも責めない）。
+// 「診療を止めない備え」の 3-③ は、医療機関用が病院の BCP、事業者用がベンダーの BCP で、別のことを聞いているので、
+// 「食い違い」とも言わない。「去年は〜ですが」と書くと時期の対比に読めるので、列の見出しと同じ「去年の回答」「ベンダーの回答」で書く
 export const CONCERN_TEXTS: Record<Concern, string> = {
   last_year_no: "去年の回答に「いいえ」があります",
   vendor_not_applicable: "ベンダーが対象外にしています。病院の側で、誰が行うか確かめてください",
+  mismatch_yes_no: "去年の回答は「はい」、ベンダーの回答は「いいえ」です。実際はどうか、確かめてください",
   last_year_unreadable: "去年の回答を読み取れませんでした。下の欄で選んでください",
   vendor_unreadable: "ベンダーの回答を読み取れませんでした。下の欄で選んでください",
 };
@@ -91,12 +100,16 @@ function readVendor(item: FocusItem, sheets: SheetRows[]): VendorReading {
   return readVendorAnswer(item, sheets) ?? { status: "no_sheet", answer: "unknown" };
 }
 
-// 去年が「いいえ」、ベンダーが「対象外」（病院の責任になる）、読み取れなかった（去年、ベンダー）、だけ。該当がなければ空。
+// 去年が「いいえ」、ベンダーが「対象外」（病院の責任になる）、去年「はい」でベンダー「いいえ」、
+// 読み取れなかった（去年、ベンダー）、だけ。該当がなければ空。
 // 事業者用のシートを読み込んでいない（no_sheet）と、事業者用に項目がない（no_item）は、読み取れなかったのではないので出さない
 function concernsOf(lastYear: ExcelReading, vendor: VendorReading): Concern[] {
   const concerns: Concern[] = [];
   if (lastYear.answer === "no") concerns.push("last_year_no");
   if (vendor.answer === "not_applicable") concerns.push("vendor_not_applicable");
+  // 去年「はい」でベンダー「いいえ」は、両方が読めているときだけ。去年「いいえ」でベンダー「いいえ」は、去年の「いいえ」で出す。
+  // 機器 2-②、更新 2-⑥、アカウント 2-④ では同じ事実の食い違い。継続性 3-③ は病院の BCP とベンダーの BCP で、別のこと
+  if (lastYear.answer === "yes" && vendor.status === "read" && vendor.answer === "no") concerns.push("mismatch_yes_no");
   if (lastYear.status !== "read") concerns.push("last_year_unreadable");
   if (vendor.status === "ambiguous" || vendor.status === "not_found") concerns.push("vendor_unreadable");
   return concerns;

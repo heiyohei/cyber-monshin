@@ -203,3 +203,54 @@ test("Excel：セルの文字が「constructor」などの受け継いだ名前�
   const byId = Object.fromEntries(readAllItems(ITEMS, sheets).map((reading) => [reading.itemId, reading]));
   assert.deepEqual(byId.update.concerns, ["last_year_unreadable", "vendor_unreadable"]);
 });
+
+test("Excel：去年「はい」でベンダー「いいえ」なら、気になる点に出す", () => {
+  const sheets: SheetRows[] = [
+    { sheet: "医療機関確認用", data: hospitalRows({}) },
+    {
+      sheet: "事業者確認用",
+      data: [["2", PATCH, "いいえ"], ["2", ROWS.devices[1], "はい"], ["3", ROWS.continuity[1], "いいえ"]],
+    },
+  ];
+  const byId = Object.fromEntries(readAllItems(ITEMS, sheets).map((reading) => [reading.itemId, reading]));
+  assert.deepEqual(byId.update, {
+    itemId: "update",
+    lastYear: { status: "read", answer: "yes" },
+    vendor: { status: "read", answer: "no" },
+    concerns: ["mismatch_yes_no"],
+  });
+  // 両方「はい」なら何も出さない
+  assert.deepEqual(byId.devices.concerns, []);
+  // 継続性の 3-③ は、医療機関用が病院の BCP、事業者用がベンダーの BCP。両方正しいこともあるが、同じ条件で出す（文は事実だけ）
+  assert.deepEqual(byId.continuity.concerns, ["mismatch_yes_no"]);
+});
+
+test("Excel：去年「いいえ」でベンダー「いいえ」、ベンダーが読めない、対象外、事業者用がない、は去年「はい」でベンダー「いいえ」にしない", () => {
+  const sheets: SheetRows[] = [
+    { sheet: "医療機関確認用", data: hospitalRows({ accounts: ["はい", "はい", "いいえ", "はい", "はい"] }) },
+    {
+      sheet: "事業者確認用",
+      data: [
+        ["2", ROWS.accounts[0], "いいえ"],
+        ["2", ROWS.devices[1], null],
+        ["2", PATCH, "対象外"],
+        ["3", ROWS.continuity[1], "はい"],
+      ],
+    },
+  ];
+  const byId = Object.fromEntries(readAllItems(ITEMS, sheets).map((reading) => [reading.itemId, reading]));
+  // 去年「いいえ」でベンダー「いいえ」は、両方が「いいえ」なので、去年の「いいえ」だけ出す
+  assert.deepEqual(byId.accounts.vendor, { status: "read", answer: "no" });
+  assert.deepEqual(byId.accounts.concerns, ["last_year_no"]);
+  // ベンダーの回答が空で読めないときは、読み取れなかったことだけ出す
+  assert.deepEqual(byId.devices.vendor, { status: "ambiguous", answer: "unknown" });
+  assert.deepEqual(byId.devices.concerns, ["vendor_unreadable"]);
+  // 「対象外」は別の種類のまま
+  assert.deepEqual(byId.update.concerns, ["vendor_not_applicable"]);
+  assert.deepEqual(byId.continuity.concerns, []);
+  // 事業者用に項目がない（バックアップ）と、事業者用のシートを読み込んでいない、では出さない
+  assert.deepEqual(byId.backup.concerns, []);
+  for (const reading of readAllItems(ITEMS, sheets.slice(0, 1))) {
+    assert.deepEqual(reading.concerns, reading.itemId === "accounts" ? ["last_year_no"] : []);
+  }
+});
