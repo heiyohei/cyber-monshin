@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { SAMPLE_HOSPITAL } from "@/data/sample";
 import type { Card } from "@/lib/card";
 import type { InterviewEvent } from "@/lib/interview";
 import type { ReadResult } from "@/lib/quote";
-import type { SealedSession, VendorRequest } from "@/lib/session";
+import { buildSaveFile } from "@/lib/save-file";
+import type { InterviewSession, SealedSession, VendorRequest } from "@/lib/session";
 
 type Question = { text: string; why: string; options: string[] };
 type ServerEvent = InterviewEvent | { type: "session"; session: SealedSession };
@@ -30,6 +31,14 @@ const fieldClass =
   "w-full rounded-8 border border-solid-gray-600 bg-white p-4 text-std-16N-170 text-solid-gray-900 hover:border-black focus-visible:focus-ring";
 const labelClass = "text-std-16B-170 text-solid-gray-800";
 const panelClass = "rounded-12 border border-solid-gray-200 bg-white p-6";
+const secondaryClass =
+  "min-h-11 w-fit rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring has-[:focus-visible]:focus-ring";
+
+const STEP_GROUPS = [
+  { key: "free", title: "今日、費用なしでできること" },
+  { key: "vendor", title: "ベンダーに聞くこと" },
+  { key: "budget", title: "予算が必要なこと（次のシステム更改などで検討）" },
+] as const;
 
 export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [card, setCard] = useState(initialCard);
@@ -132,6 +141,52 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
       last_year_answer: SAMPLE_HOSPITAL.lastYearAnswer,
       vendor_answer: SAMPLE_HOSPITAL.vendorAnswer,
     });
+  }
+
+  function saveResult() {
+    if (!session) return;
+    const file = buildSaveFile(JSON.parse(session.payload) as InterviewSession, reasons, summary);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `問診の結果_${file.savedAt.slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function loadResult(event: ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0];
+    event.target.value = "";
+    if (!selected) return;
+    setError("");
+    if (selected.size > 64_000) {
+      setError("このアプリで保存したファイルを選んでください。");
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await fetch("/api/load-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: await selected.text(),
+      });
+      if (!response.ok) {
+        await failFrom(response);
+        return;
+      }
+      const data = await response.json();
+      setSession(data.session);
+      setCard(data.card);
+      setReasons(data.reasons);
+      setSummary(data.summary);
+      setVendor(data.vendor);
+      setFinished(true);
+      setResults([]);
+    } catch {
+      setError("接続できませんでした。やり直してください。");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function copyQuestion() {
@@ -243,6 +298,15 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             <button type="button" onClick={start} className={buttonClass}>
               サンプルで試す
             </button>
+            <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
+              <p className="text-std-16N-170">
+                ベンダーの返事が届いたら、前に保存した結果を読み込んで続きから確かめられます。
+              </p>
+              <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
+                保存した結果を読み込む
+                <input type="file" accept="application/json,.json" onChange={loadResult} className="sr-only" />
+              </label>
+            </div>
           </div>
         )}
 
@@ -304,10 +368,52 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
           </div>
         )}
 
-        {finished && !vendor && (
-          <p className="text-std-16N-170">
-            今回確認した観点では穴は見つかりませんでした。対策の準拠を保証するものではありません。
-          </p>
+        {finished && (
+          <section className={`flex flex-col gap-4 ${panelClass}`} aria-label="止まる穴と次の一手">
+            <h2 className="text-std-24B-150 text-solid-gray-900">病院が止まる穴</h2>
+            {card.result.holeCount === 0 ? (
+              <p className="text-std-16N-170">
+                今回確認した観点では穴は見つかりませんでした。対策の準拠を保証するものではありません。
+              </p>
+            ) : (
+              <>
+                <ol className="flex list-decimal flex-col gap-2 pl-6 text-std-16N-170">
+                  {card.result.holes.map((hole) => (
+                    <li key={hole.viewpointId}>
+                      <span className="text-std-16B-170">{hole.name}</span>：{hole.text}
+                    </li>
+                  ))}
+                </ol>
+                {card.result.holeCount > card.result.holes.length && (
+                  <p className="text-std-16N-170 text-solid-gray-800">
+                    ほかに{card.result.holeCount - card.result.holes.length}件の穴があります。
+                  </p>
+                )}
+                <h3 className="text-std-20B-150 text-solid-gray-900">次の一手</h3>
+                {STEP_GROUPS.map((group) => (
+                  <div key={group.key}>
+                    <p className="text-std-16B-170">{group.title}</p>
+                    <ul className="list-disc pl-6 text-std-16N-170">
+                      {card.result.nextSteps[group.key].map((step) => (
+                        <li key={step}>{step}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+                <p className="text-std-16N-170 text-solid-gray-800">
+                  費用の金額は示しません。金額や必要性は、ベンダーへの確認で決めてください。
+                </p>
+              </>
+            )}
+            <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
+              <button type="button" onClick={saveResult} className={secondaryClass}>
+                結果をファイルに保存する
+              </button>
+              <p className="text-std-16N-170 text-solid-gray-800">
+                ファイルには病院の穴の情報が含まれます。院外に持ち出さないなど、取り扱いに注意してください。病院名は入りません。
+              </p>
+            </div>
+          </section>
         )}
 
         {vendor && (
@@ -315,11 +421,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             <h2 className="text-std-24B-150 text-solid-gray-900">ベンダーに確かめる</h2>
             <p className="text-std-16N-170">次の文章をベンダーへ送り、届いた返事を下に貼り付けてください。</p>
             <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">{vendor.question}</p>
-            <button
-              type="button"
-              onClick={copyQuestion}
-              className="min-h-11 w-fit rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring"
-            >
+            <button type="button" onClick={copyQuestion} className={secondaryClass}>
               {copied ? "コピーしました" : "質問文をコピーする"}
             </button>
             <label htmlFor="reply" className={labelClass}>
