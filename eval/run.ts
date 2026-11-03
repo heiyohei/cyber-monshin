@@ -6,7 +6,8 @@ import { emptyUsage, type Usage } from "../src/lib/claude.ts";
 import { viewpointResult } from "../src/lib/quote.ts";
 import { InterviewStop, runInterview, type InterviewEvent } from "../src/lib/interview.ts";
 import { createSession, vendorRequestFor, type InterviewSession } from "../src/lib/session.ts";
-import { computeBackupVerdict, VIEWPOINT_IDS, type ViewpointId } from "../src/lib/verdict.ts";
+import { computeVerdict } from "../src/lib/verdict.ts";
+import { findItem } from "../src/data/items.ts";
 import { verifyVendorReply } from "../src/lib/vendor-reply.ts";
 import { CASES, type EvalCase } from "./cases.ts";
 
@@ -18,11 +19,20 @@ const MAX_ROUNDS = 8;
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 const RUNS_DIR = `eval/runs/${new Date().toISOString().replace(/[:.]/g, "-")}`;
 
-const KEYWORDS: Record<ViewpointId, RegExp> = {
-  procedure: /手順|文書|マニュアル|決まって/,
-  isolate: /場所|切り離|離れ|分けて|保管|置いて|置か|つなが|ネットワーク/,
-  restore: /戻|復元|復旧|試し/,
-  acquire: /誰が|頻度|取って|取得/,
+// 質問文から、どの観点を聞いているかを言葉で見分ける。項目ごとに持つ
+const KEYWORDS: Record<string, Record<string, RegExp>> = {
+  backup: {
+    acquire: /誰が|頻度|取って|取得/,
+    restore: /戻|復元|復旧|試し/,
+    isolate: /場所|切り離|離れ|分けて|保管|置いて|置か|つなが|ネットワーク/,
+    procedure: /手順|文書|マニュアル|決まって/,
+  },
+  update: {
+    apply: /誰が|頻度|当て|行って|適用/,
+    responsibility: /対象外|保守|契約|範囲|担当|任せ/,
+    inventory: /一覧|台帳|把握|サポート|古い|EOS|機器の種類/,
+    verify: /動作|不具合|あと|後|正しく動/,
+  },
 };
 
 function cost(usage: Usage): number {
@@ -36,8 +46,9 @@ function cost(usage: Usage): number {
 }
 
 // 質問の順番は Claude が決めるので、質問文の言葉から台本の回答を選ぶ
-function pickAnswer(text: string, remaining: ViewpointId[], testCase: EvalCase): { id: string; answer: string } {
-  const id = remaining.find((item) => KEYWORDS[item].test(text)) ?? remaining[0];
+function pickAnswer(text: string, remaining: string[], testCase: EvalCase): { id: string; answer: string } {
+  const keywords = KEYWORDS[testCase.itemId ?? "backup"];
+  const id = remaining.find((item) => keywords[item].test(text)) ?? remaining[0];
   if (!id) return { id: "なし", answer: "それ以上のことは分かりません。" };
   remaining.splice(remaining.indexOf(id), 1);
   return { id, answer: testCase.answers[id] };
@@ -69,8 +80,9 @@ type RunResult = {
 };
 
 async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
-  const session = createSession("yes", "no_item");
-  const remaining = [...VIEWPOINT_IDS];
+  const item = findItem(testCase.itemId ?? "backup")!;
+  const session = createSession(item, "yes", testCase.vendorAnswer ?? item.sample.vendorAnswer);
+  const remaining = item.viewpoints.map((viewpoint) => viewpoint.id);
   const usage = emptyUsage();
   const startedAt = Date.now();
   const result: RunResult = {
@@ -120,7 +132,7 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
     }
 
     result.states = session.states;
-    result.verdict = computeBackupVerdict(session.states);
+    result.verdict = computeVerdict(item, session.states);
     result.verdictOk = result.verdict === testCase.expected.verdict;
     result.questions = session.questionCount;
     result.finished = session.finished;
@@ -141,11 +153,11 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
       });
       // 観点ごとにまとめた結果で比べる。要件の数は Claude が決めるため
       for (const [viewpoint, expected] of Object.entries(testCase.vendor.results)) {
-        const actual = viewpointResult(viewpoint as ViewpointId, request.requirements, results);
-        result.vendorChecks.push({ viewpoint, expected, actual: actual ?? "質問に入っていない" });
+        const actual = viewpointResult(viewpoint, request.requirements, results);
+        result.vendorChecks.push({ viewpoint, expected: expected ?? "", actual: actual ?? "質問に入っていない" });
       }
       result.fakeQuotes = results.filter((item) => item.result === "no_answer" && item.plain.includes("見つかりません")).length;
-      result.afterVerdict = computeBackupVerdict(states);
+      result.afterVerdict = computeVerdict(item, states);
       result.afterVerdictOk = result.afterVerdict === testCase.vendor.verdict;
     }
   } catch (error) {
@@ -166,7 +178,7 @@ function summarize(runs: RunResult[], cases: EvalCase[]) {
 
   for (const run of runs) {
     const expected = cases.find((item) => item.id === run.caseId)!.expected.states;
-    for (const id of VIEWPOINT_IDS) {
+    for (const id of Object.keys(expected)) {
       const hole = expected[id] !== "confirmed";
       const reported = run.states[id] === "denied" || run.states[id] === "unknown";
       total += 1;
@@ -180,7 +192,7 @@ function summarize(runs: RunResult[], cases: EvalCase[]) {
   let unstable = 0;
   for (const testCase of cases) {
     const group = runs.filter((run) => run.caseId === testCase.id);
-    for (const id of VIEWPOINT_IDS) {
+    for (const id of Object.keys(testCase.expected.states)) {
       if (new Set(group.map((run) => run.states[id])).size > 1) unstable += 1;
     }
   }
@@ -235,7 +247,7 @@ async function worker() {
     spent += cost(run.usage);
     if (spent > COST_LIMIT) stopped = true;
     const vendor = run.vendorChecks.map((item) => `${item.viewpoint}:${item.actual}`).join(" ");
-    const states = VIEWPOINT_IDS.map((id) => `${id}:${run.states[id]}`).join(" ");
+    const states = Object.entries(run.states).map(([id, status]) => `${id}:${status}`).join(" ");
     console.log(
       `${run.caseId}#${run.repeat} 判定=${run.verdict}${run.verdictOk ? "" : "（不一致）"} 質問=${run.questions} ` +
         `終了=${run.finished} 返事後=${run.afterVerdict ?? "-"}${run.afterVerdictOk === false ? "（不一致）" : ""} ` +

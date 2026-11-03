@@ -1,27 +1,31 @@
 import type { RequirementResult } from "../src/lib/quote.ts";
-import type { Verdict, ViewpointId, ViewpointStatus } from "../src/lib/verdict.ts";
+import type { VendorAnswer } from "../src/lib/session.ts";
+import type { Verdict, ViewpointStatus } from "../src/lib/verdict.ts";
 
 // 黒戸記念病院をもとにした架空のケース。事務長役の回答は台本で固定する。
 export type EvalCase = {
   id: string;
   name: string;
-  answers: Record<ViewpointId, string>;
-  expected: { states: Record<ViewpointId, ViewpointStatus>; verdict: Verdict };
+  // 省略するとバックアップと復旧。事業者の回答を省略すると、項目のサンプルの値
+  itemId?: string;
+  vendorAnswer?: VendorAnswer;
+  answers: Record<string, string>;
+  expected: { states: Record<string, ViewpointStatus>; verdict: Verdict };
   vendor?: {
     reply: string;
-    results: Partial<Record<ViewpointId, RequirementResult>>;
+    results: Partial<Record<string, RequirementResult>>;
     verdict: Verdict;
   };
 };
 
-const GOOD: Record<ViewpointId, string> = {
+const GOOD: Record<string, string> = {
   acquire: "保守のベンダーさんが毎日、夜に取っています。作業の報告も毎月届いています。",
   restore: "去年の秋に、ベンダーさんと一緒に実際に戻してみて、戻せることを確かめました。",
   isolate: "院内のネットワークから切り離した外付けの機器に保管しています。普段はつないでいません。",
   procedure: "戻す手順は文書になっていて、誰が何をするかも決まっています。",
 };
 
-const CONFIRMED: Record<ViewpointId, ViewpointStatus> = {
+const CONFIRMED: Record<string, ViewpointStatus> = {
   acquire: "confirmed",
   restore: "confirmed",
   isolate: "confirmed",
