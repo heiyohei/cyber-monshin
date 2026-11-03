@@ -21,8 +21,9 @@ test.describe("@paid 実際の Claude を呼ぶ", () => {
     const form = page.locator("form").filter({ hasText: "なぜこの質問？" });
     await expect(form.getByRole("button", { name: "回答する" })).toBeDisabled();
 
-    // 選択肢を1つ押すと回答欄に入るだけで、まだ送られない。押した選択肢の文は、あとで履歴に残ることを確かめるのに使う
-    const options = form.locator('button[type="button"]');
+    // 選択肢を1つ押すと回答欄に入るだけで、まだ送られない。押した選択肢の文は、あとで履歴に残ることを確かめるのに使う。
+    // 質問の文の中の用語（点線の下線）もボタンなので、form の直下の div に並ぶ選択肢のボタンだけを取る
+    const options = form.locator(':scope > div > button[type="button"]');
     await expect(options.first()).toBeVisible();
     const chosen = (await options.first().textContent()) ?? "";
     expect(chosen).not.toBe("");
