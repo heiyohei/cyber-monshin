@@ -33,6 +33,7 @@ export const BACKUP_ITEM = {
     id: "backup_q1",
     text: "バックアップは、誰が、どのくらいの頻度で取っていますか？",
     why: "まず、データの控えが本当に取られているかを確かめます。",
+    options: ["ベンダーが毎日取っている", "院内の担当者が取っている", "取っていない", "わからない"],
   },
   defaultEvidence: {
     id: "ev_backup",
@@ -86,7 +87,7 @@ export const BACKUP_ITEM = {
   name: string;
   checkItem: string;
   checkItemText: string;
-  firstQuestion: { id: string; text: string; why: string };
+  firstQuestion: { id: string; text: string; why: string; options: readonly string[] };
   defaultEvidence: Evidence;
   viewpoints: { id: ViewpointId; name: string; goal: string; evidence: Evidence }[];
 };

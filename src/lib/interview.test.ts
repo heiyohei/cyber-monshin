@@ -13,8 +13,8 @@ function report(viewpoint_id: string, status: string, answer_ids: string[], item
   return tool("report_viewpoint", { item_id, viewpoint_id, status, answer_ids, reason: "理由" });
 }
 
-function ask(question_id: string) {
-  return tool("ask_question", { item_id: "backup", question_id, text: "質問", why: "理由", options: [] });
+function ask(question_id: string, options: string[] = ["はい", "わからない"]) {
+  return tool("ask_question", { item_id: "backup", question_id, text: "質問", why: "理由", options });
 }
 
 function vendor(gap_type: string, viewpoint_id = "restore") {
@@ -69,6 +69,26 @@ test("質問：最初は固定の質問だけを認め、文面は固定デー�
   processToolUses([ask("backup_q1")], session, emit);
   const question = events.find((event) => event.type === "question");
   assert.equal(question?.type === "question" && question.text.includes("バックアップ"), true);
+});
+
+test("質問：最初の質問は固定の選択肢を出す", () => {
+  const { session, events, emit } = setup();
+  processToolUses([ask("backup_q1", [])], session, emit);
+  const question = events.find((event) => event.type === "question");
+  assert.equal(question?.type === "question" && question.options.at(-1), "わからない");
+});
+
+test("質問：2問目からは選択肢が2〜4個ないと受け付けない", () => {
+  const { session, events, emit } = setup();
+  session.questionCount = 1;
+  for (const options of [[], ["はい"], ["1", "2", "3", "4", "5"], ["長".repeat(41), "わからない"]]) {
+    assert.equal(processToolUses([ask("", options)], session, emit)[0].is_error, true);
+  }
+  assert.equal(session.pendingQuestionId, null);
+
+  processToolUses([ask("", [" はい ", "いいえ", "わからない"])], session, emit);
+  const question = events.find((event) => event.type === "question");
+  assert.deepEqual(question?.type === "question" && question.options, ["はい", "いいえ", "わからない"]);
 });
 
 test("質問：2件目には is_error を返し、1件だけ保留する", () => {

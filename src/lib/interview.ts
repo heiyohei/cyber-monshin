@@ -33,6 +33,7 @@ const SYSTEM_PROMPT = `あなたは、中小病院の事務職員を助ける問
 進め方：
 - 最初に get_focus_item で項目を読み、固定の最初の質問を ask_question の question_id に指定して聞く
 - 1回に1問だけ聞く。専門用語を使わず、「なぜこの質問？」を why に書く
+- 回答の選択肢を、毎回2〜4個 options に入れる。1つ20字程度までの短い言葉にし、最後は「わからない」にする。事務職員は選択肢を選ぶか、自由に書いて答える
 - 回答を受け取ったら、次の質問の前に、読み取れた観点をすべて report_viewpoint で報告する
 - 回答で分かったことだけを報告する。答えられなかった場合は unknown とする
 - 判定は決めない。判定はプログラムが計算する
@@ -65,7 +66,11 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
         question_id: { type: "string", description: "固定の質問の ID。掘り下げの質問では空文字" },
         text: { type: "string", description: "専門用語を使わない質問文" },
         why: { type: "string", description: "「なぜこの質問？」の説明" },
-        options: { type: "array", items: { type: "string" }, description: "選択肢。自由記入なら空" },
+        options: {
+          type: "array",
+          items: { type: "string" },
+          description: "回答の選択肢。2〜4個。最後は「わからない」。固定の質問では固定の選択肢が使われる",
+        },
       },
       required: ["item_id", "question_id", "text", "why", "options"],
       additionalProperties: false,
@@ -284,9 +289,15 @@ function validateAsk(block: ToolUse, session: InterviewSession): z.infer<typeof 
   const first = BACKUP_ITEM.firstQuestion;
   if (session.questionCount === 0) {
     if (input.data.question_id !== first.id) return `最初の質問は question_id に ${first.id} を指定してください。`;
-    return { ...input.data, text: first.text, why: first.why };
+    return { ...input.data, text: first.text, why: first.why, options: [...first.options] };
   }
-  return input.data;
+
+  // 選択肢は毎回出す。長すぎるものや多すぎるものは画面で選びにくい
+  const options = input.data.options.map((option) => option.trim()).filter(Boolean);
+  if (options.length < 2 || options.length > 4 || options.some((option) => option.length > 40)) {
+    return "options には、40字以内の選択肢を2〜4個入れてください。最後は「わからない」にしてください。";
+  }
+  return { ...input.data, options };
 }
 
 // 質問より先に、記録と参照のツールを実行する。質問の結果は回答が来るまで保留する。
