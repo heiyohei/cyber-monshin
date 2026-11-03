@@ -3,6 +3,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { emptyUsage, type Usage } from "../src/lib/claude.ts";
+import { viewpointResult } from "../src/lib/quote.ts";
 import { InterviewStop, runInterview, type InterviewEvent } from "../src/lib/interview.ts";
 import { createSession, vendorRequestFor, type InterviewSession } from "../src/lib/session.ts";
 import { computeBackupVerdict, VIEWPOINT_IDS, type ViewpointId } from "../src/lib/verdict.ts";
@@ -106,10 +107,10 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
         AbortSignal.timeout(180_000),
         usage,
       );
+      // 観点ごとにまとめた結果で比べる。要件の数は Claude が決めるため
       for (const [viewpoint, expected] of Object.entries(testCase.vendor.results)) {
-        const ids = request.requirements.filter((item) => item.viewpointId === viewpoint).map((item) => item.id);
-        const found = results.filter((item) => ids.includes(item.requirement_id)).map((item) => item.result);
-        result.vendorChecks.push({ viewpoint, expected, actual: found.join(",") || "質問に入っていない" });
+        const actual = viewpointResult(viewpoint as ViewpointId, request.requirements, results);
+        result.vendorChecks.push({ viewpoint, expected, actual: actual ?? "質問に入っていない" });
       }
       result.fakeQuotes = results.filter((item) => item.result === "no_answer" && item.plain.includes("見つかりません")).length;
       result.afterVerdict = computeBackupVerdict(states);
@@ -195,6 +196,8 @@ async function worker() {
     spent += cost(run.usage);
     if (spent > COST_LIMIT) stopped = true;
     const vendor = run.vendorChecks.map((item) => `${item.viewpoint}:${item.actual}`).join(" ");
+    const states = VIEWPOINT_IDS.map((id) => `${id}:${run.states[id]}`).join(" ");
+    console.log(`  状態 ${states}`);
     console.log(
       `${run.caseId}#${run.repeat} 判定=${run.verdict}${run.verdictOk ? "" : "（不一致）"} 質問=${run.questions} ` +
         `終了=${run.finished} 返事後=${run.afterVerdict ?? "-"}${run.afterVerdictOk === false ? "（不一致）" : ""} ` +
