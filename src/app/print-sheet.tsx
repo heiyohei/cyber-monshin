@@ -14,13 +14,17 @@ export function PrintSheet({ card }: { card: Card }) {
 
   return (
     <section id="print-sheet" className="hidden text-[10.5pt] leading-[1.6] text-black print:block">
-      <h1 className="text-[16pt] font-bold">サイバー対策の点検結果（バックアップと復旧）</h1>
+      <h1 className="text-[16pt] font-bold">サイバー対策の点検結果（{card.itemName}）</h1>
       <p className="mt-2">
         病院名：＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿　点検日：＿＿＿＿年＿＿月＿＿日
       </p>
 
       <h2 className="mt-4 text-[12pt] font-bold">判定：{card.label}</h2>
-      <p>チェック項目 3-②：{card.checkItemText}</p>
+      {card.checkItems.map((checkItem) => (
+        <p key={checkItem.no}>
+          チェック項目 {checkItem.no}：{checkItem.text}
+        </p>
+      ))}
 
       <h2 className="mt-4 text-[12pt] font-bold">病院が止まる穴</h2>
       {card.result.holeCount === 0 ? (
@@ -65,7 +69,7 @@ export function PrintSheet({ card }: { card: Card }) {
       <ul className="list-disc pl-6">
         <li>事務の担当者の回答とベンダーの返事に基づく自己点検です。実地の確認ではありません。</li>
         <li>対策の準拠を保証するものではなく、法的な判断もしていません。</li>
-        <li>バックアップと復旧だけを確かめたもので、すべての対策を確かめたものではありません。</li>
+        <li>{card.itemName}だけを確かめたもので、すべての対策を確かめたものではありません。</li>
         <li>
           根拠は厚生労働省の公開資料（チェックリスト、同マニュアル 令和8年度版、医療情報システムの安全管理に関するガイドライン
           第7.0版）からの引用です。厚生労働省が作成したものではありません。

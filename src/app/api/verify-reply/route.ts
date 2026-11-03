@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getSessionSecret } from "@/lib/auth";
 import { buildCard } from "@/lib/card";
 import { apiErrorMessage, emptyUsage, logApiError, MAX_BODY_LENGTH } from "@/lib/claude";
-import { openSession, sealSession, vendorRequestFor } from "@/lib/session";
+import { itemOf, openSession, sealSession, vendorRequestFor } from "@/lib/session";
 import { verifyVendorReply, VendorReplyStop } from "@/lib/vendor-reply";
 
 export const maxDuration = 120;
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     session.states = states;
     return Response.json({
       results,
-      card: buildCard(states, session.lastYearAnswer),
+      card: buildCard(itemOf(session), states, session.lastYearAnswer),
       session: sealSession(session, secret),
     });
   } catch (error) {

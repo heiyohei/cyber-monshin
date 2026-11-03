@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_ITEM_ID, getItem } from "@/data/items";
 import { getSessionSecret } from "@/lib/auth";
 import { apiErrorMessage, emptyUsage, logApiError, MAX_BODY_LENGTH } from "@/lib/claude";
 import { InterviewStop, runInterview, type InterviewEvent } from "@/lib/interview";
@@ -9,6 +10,7 @@ export const maxDuration = 120;
 const BodySchema = z.object({
   session: z.object({ payload: z.string(), signature: z.string() }).optional(),
   answer: z.string().trim().min(1).max(1000).optional(),
+  item_id: z.string().max(40).default(DEFAULT_ITEM_ID),
   last_year_answer: z.enum(["yes", "no", "unknown"]).default("unknown"),
   vendor_answer: z.enum(["yes", "no", "not_applicable", "no_item", "unknown"]).default("unknown"),
 });
@@ -38,7 +40,10 @@ export async function POST(request: Request) {
     session = openSession(body.data.session, secret);
     if (!session) return fail(400, "問診の情報を確認できませんでした。最初からやり直してください。");
   } else {
-    session = createSession(body.data.last_year_answer, body.data.vendor_answer);
+    // 新しく始められるのは、公開している重点項目だけ
+    const item = getItem(body.data.item_id);
+    if (!item) return fail(400, "この対策はまだ確かめられません。");
+    session = createSession(item, body.data.last_year_answer, body.data.vendor_answer);
   }
   const current = session;
 

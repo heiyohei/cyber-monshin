@@ -1,17 +1,18 @@
 "use client";
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
-import type { Evidence } from "@/data/backup";
-import { SAMPLE_HOSPITAL } from "@/data/sample";
+import { getItem, ITEMS, PLANNED_ITEMS } from "@/data/items";
+import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
+import type { Evidence, FocusItem } from "@/data/types";
 import { PrintSheet } from "./print-sheet";
 import { buildCard, type Card } from "@/lib/card";
-import { readBackupAnswer, type ExcelReading } from "@/lib/checklist-excel";
+import { readItemAnswer, readVendorAnswer, type ExcelReading } from "@/lib/checklist-excel";
 import { initialStates } from "@/lib/verdict";
 import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
 import type { ReadResult } from "@/lib/quote";
 import { buildSaveFile } from "@/lib/save-file";
-import type { InterviewSession, LastYearAnswer, SealedSession, VendorRequest } from "@/lib/session";
+import type { InterviewSession, LastYearAnswer, SealedSession, VendorAnswer, VendorRequest } from "@/lib/session";
 
 type Question = { text: string; why: string; options: string[] };
 type ServerEvent = InterviewEvent | { type: "session"; session: SealedSession };
@@ -101,8 +102,22 @@ function EvidenceText({ evidence }: { evidence: Evidence }) {
   );
 }
 
+function checkItemNumbers(item: { checkItems: readonly { no: string }[] }): string {
+  return item.checkItems.map((checkItem) => checkItem.no).join("、");
+}
+
+const VENDOR_LABELS: Record<VendorAnswer, string> = {
+  yes: "はい",
+  no: "いいえ",
+  not_applicable: "対象外",
+  no_item: "項目がない",
+  unknown: "わからない（要確認）",
+};
+
 export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [card, setCard] = useState(initialCard);
+  const [itemId, setItemId] = useState(initialCard.itemId);
+  const item: FocusItem = getItem(itemId) ?? ITEMS[0];
   const [session, setSession] = useState<SealedSession | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
   const [answer, setAnswer] = useState("");
@@ -124,6 +139,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [termBusy, setTermBusy] = useState(false);
   const [excel, setExcel] = useState<ExcelReading | null>(null);
   const [excelAnswer, setExcelAnswer] = useState<LastYearAnswer>("unknown");
+  const [excelVendor, setExcelVendor] = useState<VendorAnswer>("unknown");
   const [needsCode, setNeedsCode] = useState(false);
   const [code, setCode] = useState("");
 
@@ -204,10 +220,20 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     }
   }
 
-  function start(lastYearAnswer: LastYearAnswer = SAMPLE_HOSPITAL.lastYearAnswer) {
-    setCard(buildCard(initialStates(), lastYearAnswer));
-    // 事業者用チェックリストには 3-② に当たる項目がない
-    return sendInterview({ last_year_answer: lastYearAnswer, vendor_answer: "no_item" });
+  function chooseItem(id: string) {
+    const chosen = getItem(id);
+    if (!chosen) return;
+    setItemId(id);
+    setCard(buildCard(chosen, initialStates(chosen), chosen.sample.lastYearAnswer));
+    setExcel(null);
+  }
+
+  function start(
+    lastYearAnswer: LastYearAnswer = item.sample.lastYearAnswer,
+    vendorAnswer: VendorAnswer = item.sample.vendorAnswer,
+  ) {
+    setCard(buildCard(item, initialStates(item), lastYearAnswer));
+    return sendInterview({ item_id: item.id, last_year_answer: lastYearAnswer, vendor_answer: vendorAnswer });
   }
 
   // Excel はこの画面の中だけで読み、サーバーへは送らない
@@ -222,12 +248,16 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     }
     try {
       const { default: readExcelFile } = await import("read-excel-file/browser");
-      const reading = readBackupAnswer(await readExcelFile(selected));
+      const sheets = await readExcelFile(selected);
+      const reading = readItemAnswer(item, sheets);
       setExcel(reading);
       setExcelAnswer(reading.answer);
+      // 事業者用の項目がなければ「項目がない」。事業者用のシートがなければ選んでもらう
+      setExcelVendor(item.vendorCheckItem ? (readVendorAnswer(item, sheets)?.answer ?? "unknown") : "no_item");
     } catch {
       setExcel({ status: "not_found", answer: "unknown" });
       setExcelAnswer("unknown");
+      setExcelVendor(item.vendorCheckItem ? "unknown" : "no_item");
     }
   }
 
@@ -264,6 +294,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
       }
       const data = await response.json();
       setSession(data.session);
+      setItemId(data.card.itemId);
       setCard(data.card);
       setReasons(data.reasons);
       setSummary(data.summary);
@@ -435,10 +466,47 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
 
         {!session && !busy && (
           <div className={`flex flex-col gap-3 ${panelClass}`}>
-            <h2 className="text-std-24B-150 text-solid-gray-900">サンプルで試す</h2>
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-std-24B-150 text-solid-gray-900">確かめる対策を選ぶ</legend>
+              <p className="text-std-16N-170">
+                チェックリストのうち、病院が止まる穴につながりやすい重点項目から選びます。
+              </p>
+              {ITEMS.map((choice) => (
+                <label
+                  key={choice.id}
+                  className="flex cursor-pointer items-start gap-3 rounded-8 border border-solid-gray-420 p-3 has-[:checked]:border-blue-900 has-[:checked]:bg-blue-50 has-[:focus-visible]:focus-ring"
+                >
+                  <input
+                    type="radio"
+                    name="item"
+                    value={choice.id}
+                    checked={itemId === choice.id}
+                    onChange={() => chooseItem(choice.id)}
+                    className="mt-1.5 size-5 accent-blue-900"
+                  />
+                  <span className="text-std-16N-170">
+                    <span className="text-std-16B-170">{choice.name}</span>（チェック項目 {checkItemNumbers(choice)}）
+                    <br />
+                    <span className="text-solid-gray-800">攻撃の段階：{choice.stage}</span>
+                  </span>
+                </label>
+              ))}
+              {PLANNED_ITEMS.map((planned) => (
+                <div
+                  key={planned.id}
+                  className="flex items-start justify-between gap-3 rounded-8 border border-dashed border-solid-gray-420 p-3 text-std-16N-170 text-solid-gray-800"
+                >
+                  <span>
+                    {planned.name}（チェック項目 {planned.checkItems.join("、")}）
+                  </span>
+                  <span className="whitespace-nowrap">今後の拡張</span>
+                </div>
+              ))}
+            </fieldset>
+            <h2 className="border-t border-solid-gray-200 pt-4 text-std-20B-150 text-solid-gray-900">サンプルで試す</h2>
             <p className="text-std-16N-170">
               {SAMPLE_HOSPITAL.name}の担当者になったつもりで、質問に答えてみてください。
-              {SAMPLE_HOSPITAL.description}
+              {sampleDescription(item)}
             </p>
             <p className="text-std-16N-170 text-solid-gray-800">
               実際の病院の情報は入れないでください。回答はこの画面を閉じると消えます。
@@ -448,8 +516,8 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             </button>
             <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
               <p className="text-std-16N-170">
-                去年のチェックリスト（医療機関用の Excel）から始めることもできます。Excel はこの画面の中で読み、送るのは
-                3-② の回答（はい／いいえ）だけです。
+                去年のチェックリスト（Excel）から始めることもできます。Excel はこの画面の中で読み、送るのは
+                {checkItemNumbers(item)} の回答だけです。
               </p>
               <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
                 Excel を読み込む
@@ -464,11 +532,11 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
                 <div className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
                   <p className="text-std-16N-170">
                     {excel.status === "read"
-                      ? "3-② の去年の回答を読み取りました。違っていれば選び直してください。"
-                      : "3-② の回答を読み取れませんでした（要確認）。去年の回答を選んでください。"}
+                      ? `${checkItemNumbers(item)} の去年の回答を読み取りました。違っていれば選び直してください。`
+                      : `${checkItemNumbers(item)} の回答を読み取れませんでした（要確認）。去年の回答を選んでください。`}
                   </p>
                   <label htmlFor="last-year" className={labelClass}>
-                    3-② の去年の回答
+                    {checkItemNumbers(item)} の去年の回答
                   </label>
                   <select
                     id="last-year"
@@ -480,7 +548,26 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
                     <option value="no">いいえ</option>
                     <option value="unknown">わからない（要確認）</option>
                   </select>
-                  <button type="button" onClick={() => start(excelAnswer)} className={buttonClass}>
+                  {item.vendorCheckItem && (
+                    <>
+                      <label htmlFor="vendor-answer" className={labelClass}>
+                        事業者用チェックリスト {item.vendorCheckItem.no} の、ベンダーの回答
+                      </label>
+                      <select
+                        id="vendor-answer"
+                        value={excelVendor}
+                        onChange={(event) => setExcelVendor(event.target.value as VendorAnswer)}
+                        className={fieldClass}
+                      >
+                        {(["yes", "no", "not_applicable", "unknown"] as const).map((value) => (
+                          <option key={value} value={value}>
+                            {VENDOR_LABELS[value]}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                  <button type="button" onClick={() => start(excelAnswer, excelVendor)} className={buttonClass}>
                     この回答で問診を始める
                   </button>
                 </div>
@@ -739,9 +826,15 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
 
       <aside className={`flex flex-col gap-4 self-start ${panelClass}`} aria-label="判定">
         <div aria-live="polite">
-          <p className="text-std-16N-170 text-solid-gray-800">バックアップと復旧（3-②）</p>
+          <p className="text-std-16N-170 text-solid-gray-800">
+            {card.itemName}（{checkItemNumbers(card)}）
+          </p>
           <p className="text-std-32B-150 text-solid-gray-900">{card.label}</p>
-          <p className="mt-2 text-std-16N-170 text-solid-gray-800">チェック項目：{card.checkItemText}</p>
+          {card.checkItems.map((checkItem) => (
+            <p key={checkItem.no} className="mt-2 text-std-16N-170 text-solid-gray-800">
+              チェック項目 {checkItem.no}：{checkItem.text}
+            </p>
+          ))}
           {card.verdict !== "reviewing" && <EvidenceText evidence={card.itemEvidence} />}
         </div>
         <ul className="flex flex-col gap-3">

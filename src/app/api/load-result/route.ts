@@ -1,7 +1,7 @@
 import { getSessionSecret } from "@/lib/auth";
 import { buildCard } from "@/lib/card";
 import { sessionFromSaveFile } from "@/lib/save-file";
-import { sealSession, vendorRequestFor } from "@/lib/session";
+import { itemOf, sealSession, vendorRequestFor } from "@/lib/session";
 
 const MAX_FILE_LENGTH = 64_000;
 
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   const item = file.items[0];
   return Response.json({
     session: sealSession(session, secret),
-    card: buildCard(session.states, session.lastYearAnswer),
+    card: buildCard(itemOf(session), session.states, session.lastYearAnswer),
     reasons: item.reasons,
     summary: item.summary,
     vendor: vendorRequestFor(session),

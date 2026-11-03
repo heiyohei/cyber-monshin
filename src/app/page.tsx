@@ -1,10 +1,11 @@
-import { SOURCES } from "@/data/backup";
-import { SAMPLE_HOSPITAL } from "@/data/sample";
+import { DEFAULT_ITEM_ID, getItem } from "@/data/items";
+import { SOURCES } from "@/data/sources";
 import { buildCard } from "@/lib/card";
 import { initialStates } from "@/lib/verdict";
 import { InterviewDemo } from "./interview-demo";
 
 export default function Home() {
+  const item = getItem(DEFAULT_ITEM_ID)!;
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8">
       <header className="flex flex-col gap-2">
@@ -23,12 +24,12 @@ export default function Home() {
       <ul className="list-disc space-y-1 rounded-8 bg-solid-gray-50 py-4 pr-4 pl-9 text-std-16N-170 text-solid-gray-800">
         <li>対策の準拠を保証するものではなく、法的な判断もしません。</li>
         <li>厚生労働省の公式ツールではありません。</li>
-        <li>すべての対策を確かめるものではありません。今回はバックアップと復旧だけを確かめます。ほかの項目は今後の拡張です。</li>
+        <li>すべての対策を確かめるものではありません。チェックリストのうち、病院が止まる穴につながりやすい重点項目を確かめます。準備中の項目は今後の拡張です。</li>
         <li>患者情報などの機微な情報は入力しないでください。回答はこのサイトに保存しませんが、処理のため AI の Claude を提供する Anthropic 社へ送ります。</li>
         <li>黒戸記念病院と黒戸町は架空です。</li>
       </ul>
 
-      <InterviewDemo initialCard={buildCard(initialStates(), SAMPLE_HOSPITAL.lastYearAnswer)} />
+      <InterviewDemo initialCard={buildCard(item, initialStates(item), item.sample.lastYearAnswer)} />
 
       <footer className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4 text-dns-14N-130 text-solid-gray-800">
         <p>
