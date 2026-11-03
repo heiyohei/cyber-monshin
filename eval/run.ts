@@ -197,12 +197,12 @@ async function worker() {
     if (spent > COST_LIMIT) stopped = true;
     const vendor = run.vendorChecks.map((item) => `${item.viewpoint}:${item.actual}`).join(" ");
     const states = VIEWPOINT_IDS.map((id) => `${id}:${run.states[id]}`).join(" ");
-    console.log(`  状態 ${states}`);
     console.log(
       `${run.caseId}#${run.repeat} 判定=${run.verdict}${run.verdictOk ? "" : "（不一致）"} 質問=${run.questions} ` +
         `終了=${run.finished} 返事後=${run.afterVerdict ?? "-"}${run.afterVerdictOk === false ? "（不一致）" : ""} ` +
         `${vendor} ${run.error ?? ""} $${cost(run.usage).toFixed(3)} ${run.ms}ms`,
     );
+    console.log(`  状態 ${states}`);
   }
 }
 
