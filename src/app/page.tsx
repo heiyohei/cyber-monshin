@@ -7,19 +7,19 @@ export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8">
       <header className="flex flex-col gap-2">
-        <p className="text-sm font-medium opacity-70">
+        <p className="text-std-16N-170 text-solid-gray-800">
           中小病院の事務職員のための点検アシスタント
         </p>
-        <h1 className="text-3xl font-bold leading-tight">
+        <h1 className="text-std-32B-150 text-solid-gray-900">
           病院のサイバー問診アシスタント
         </h1>
-        <p className="leading-relaxed">
+        <p className="text-std-16N-170">
           その「はい」、本当に大丈夫？ ―
           サイバーセキュリティ対策チェックリストを、専門家の目でもう一度
         </p>
       </header>
 
-      <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed opacity-80">
+      <ul className="list-disc space-y-1 rounded-8 bg-solid-gray-50 py-4 pr-4 pl-9 text-std-16N-170 text-solid-gray-800">
         <li>対策の準拠を保証するものではなく、法的な判断もしません。</li>
         <li>厚生労働省の公式ツールではありません。</li>
         <li>すべての対策を確かめるものではありません。今回はバックアップと復旧だけを確かめます。ほかの項目は今後の拡張です。</li>
@@ -32,6 +32,10 @@ export default function Home() {
         vendorQuestion={SAMPLE_VENDOR_QUESTION.question}
         requirements={SAMPLE_VENDOR_QUESTION.requirements}
       />
+
+      <footer className="border-t border-solid-gray-200 pt-4 text-dns-14N-130 text-solid-gray-800">
+        画面は、デジタル庁デザインシステムのデザイントークン（MIT License）を使って作成しました。デジタル庁が作成、提供するものではありません。
+      </footer>
     </main>
   );
 }

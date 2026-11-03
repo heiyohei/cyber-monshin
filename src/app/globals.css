@@ -1,8 +1,10 @@
 @import "tailwindcss";
+/* デジタル庁デザインシステムのデザイントークン（MIT License）。色、文字、角丸はここから使う */
+@import "@digital-go-jp/tailwind-theme-plugin/v4";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: var(--color-white);
+  --foreground: var(--color-solid-gray-900);
 }
 
 @theme inline {
@@ -11,11 +13,10 @@
   --font-sans: var(--font-noto-sans-jp), sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@utility focus-ring {
+  outline: 4px solid var(--color-black);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--color-yellow-300);
 }
 
 body {

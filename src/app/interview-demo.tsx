@@ -24,8 +24,11 @@ const RESULT_LABELS = {
 } as const;
 
 const buttonClass =
-  "rounded-lg bg-foreground px-4 py-2 font-medium text-background disabled:opacity-50";
-const fieldClass = "w-full rounded-lg border border-foreground/30 bg-transparent p-2";
+  "min-h-14 rounded-8 bg-blue-900 px-6 text-oln-16B-100 text-white hover:bg-blue-1000 hover:underline active:bg-blue-1000 focus-visible:focus-ring disabled:bg-solid-gray-300 disabled:text-solid-gray-800 disabled:no-underline";
+const fieldClass =
+  "w-full rounded-8 border border-solid-gray-600 bg-white p-4 text-std-16N-170 text-solid-gray-900 hover:border-black focus-visible:focus-ring";
+const labelClass = "text-std-16B-170 text-solid-gray-800";
+const panelClass = "rounded-12 border border-solid-gray-200 bg-white p-6";
 
 export function InterviewDemo({
   initialCard,
@@ -188,14 +191,14 @@ export function InterviewDemo({
     <div className="grid gap-8 lg:grid-cols-2">
       <section className="flex flex-col gap-6" aria-label="問診とベンダーの返事">
         {error && (
-          <p role="alert" className="rounded-lg border border-foreground/40 p-3">
+          <p role="alert" className="rounded-8 border-2 border-error-1 bg-white p-4 text-std-16B-170 text-error-1">
             {error}
           </p>
         )}
 
         {needsCode && (
           <form onSubmit={submitCode} className="flex flex-col gap-2">
-            <label htmlFor="access-code" className="font-medium">
+            <label htmlFor="access-code" className={labelClass}>
               合言葉
             </label>
             <input
@@ -217,7 +220,11 @@ export function InterviewDemo({
           </button>
         )}
 
-        {busy && <p aria-live="polite">確認しています…</p>}
+        {busy && (
+          <p aria-live="polite" className="text-std-16N-170">
+            確認しています…
+          </p>
+        )}
 
         {canContinue && !busy && (
           <button type="button" onClick={() => sendInterview({ session })} className={buttonClass}>
@@ -227,8 +234,10 @@ export function InterviewDemo({
 
         {question && !busy && (
           <form onSubmit={submitAnswer} className="flex flex-col gap-3">
-            <p className="text-lg font-medium">{question.text}</p>
-            <p className="text-sm opacity-80">なぜこの質問？ {question.why}</p>
+            <p className="text-std-20B-150 text-solid-gray-900">{question.text}</p>
+            <p className="rounded-8 bg-blue-50 p-4 text-std-16N-170 text-solid-gray-800">
+              なぜこの質問？ {question.why}
+            </p>
             {question.options.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {question.options.map((option) => (
@@ -236,14 +245,14 @@ export function InterviewDemo({
                     key={option}
                     type="button"
                     onClick={() => setAnswer(option)}
-                    className="rounded-lg border border-foreground/30 px-3 py-1 text-sm"
+                    className="min-h-11 rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring"
                   >
                     {option}
                   </button>
                 ))}
               </div>
             )}
-            <label htmlFor="answer" className="text-sm font-medium">
+            <label htmlFor="answer" className={labelClass}>
               回答（1,000文字まで。病院名、担当者名、IP アドレスは書かないでください）
             </label>
             <textarea
@@ -260,13 +269,13 @@ export function InterviewDemo({
           </form>
         )}
 
-        {note && <p className="whitespace-pre-wrap leading-relaxed">{note}</p>}
+        {note && <p className="whitespace-pre-wrap text-std-16N-170">{note}</p>}
 
         {session && (
-          <form onSubmit={submitReply} className="flex flex-col gap-3 border-t border-foreground/20 pt-6">
-            <h2 className="text-lg font-bold">ベンダーの返事を確かめる</h2>
-            <p className="text-sm leading-relaxed">確認事項（サンプル）：{vendorQuestion}</p>
-            <label htmlFor="reply" className="text-sm font-medium">
+          <form onSubmit={submitReply} className="flex flex-col gap-3 border-t border-solid-gray-200 pt-6">
+            <h2 className="text-std-24B-150 text-solid-gray-900">ベンダーの返事を確かめる</h2>
+            <p className="text-std-16N-170">確認事項（サンプル）：{vendorQuestion}</p>
+            <label htmlFor="reply" className={labelClass}>
               返事（4,000文字まで。病院名、担当者名、IP アドレスは消してください）
             </label>
             <textarea
@@ -286,34 +295,38 @@ export function InterviewDemo({
         {results.length > 0 && (
           <ul className="flex flex-col gap-3">
             {results.map((result) => (
-              <li key={result.requirement_id} className="rounded-lg border border-foreground/20 p-3">
-                <p className="font-medium">
+              <li key={result.requirement_id} className={panelClass}>
+                <p className="text-std-18B-160">
                   {requirements.find((item) => item.id === result.requirement_id)?.text}：
                   {RESULT_LABELS[result.result]}
                 </p>
-                {result.quote && <blockquote className="mt-1 text-sm opacity-80">原文：{result.quote}</blockquote>}
-                <p className="mt-1 text-sm">{result.plain}</p>
-                {result.follow_up && <p className="mt-1 text-sm">追加の質問：{result.follow_up}</p>}
+                {result.quote && (
+                  <blockquote className="mt-2 border-l-4 border-solid-gray-420 pl-3 text-std-16N-170 text-solid-gray-800">
+                    原文：{result.quote}
+                  </blockquote>
+                )}
+                <p className="mt-2 text-std-16N-170">{result.plain}</p>
+                {result.follow_up && <p className="mt-2 text-std-16N-170">追加の質問：{result.follow_up}</p>}
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <aside className="flex flex-col gap-4 rounded-lg border border-foreground/20 p-4" aria-label="判定">
+      <aside className={`flex flex-col gap-4 self-start ${panelClass}`} aria-label="判定">
         <div aria-live="polite">
-          <p className="text-sm opacity-70">バックアップと復旧（3-②）</p>
-          <p className="text-2xl font-bold">{card.label}</p>
+          <p className="text-std-16N-170 text-solid-gray-800">バックアップと復旧（3-②）</p>
+          <p className="text-std-32B-150 text-solid-gray-900">{card.label}</p>
         </div>
         <ul className="flex flex-col gap-3">
           {card.viewpoints.map((viewpoint) => (
-            <li key={viewpoint.id} className="text-sm leading-relaxed">
-              <p className="font-medium">
+            <li key={viewpoint.id} className="border-t border-solid-gray-200 pt-3 text-std-16N-170">
+              <p className="text-std-16B-170">
                 {viewpoint.name}：{STATUS_LABELS[viewpoint.status]}
               </p>
               {reasons[viewpoint.id] && <p>{reasons[viewpoint.id]}</p>}
               {viewpoint.status !== "not_asked" && (
-                <p className="opacity-80">根拠：{viewpoint.evidence}</p>
+                <p className="text-solid-gray-800">根拠：{viewpoint.evidence}</p>
               )}
             </li>
           ))}

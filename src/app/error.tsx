@@ -10,7 +10,7 @@ export default function Error({ retry }: { error: unknown; retry: () => void }) 
       <button
         type="button"
         onClick={() => retry()}
-        className="w-fit rounded-lg bg-foreground px-5 py-3 font-medium text-background"
+        className="min-h-14 w-fit rounded-8 bg-blue-900 px-6 text-oln-16B-100 text-white hover:bg-blue-1000 hover:underline focus-visible:focus-ring"
       >
         もう一度試す
       </button>
