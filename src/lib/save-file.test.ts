@@ -54,6 +54,27 @@ test("保存：これまでの質問と回答は入らない", () => {
   ]);
 });
 
+// 返事の中の AI への指示のように読める文の報告は、画面で知らせるだけ。保存ファイル（版1）には、報告も引用の文も入らない
+test("保存：返事の中の指示のような文の報告は入らない", () => {
+  const session = finishedSession();
+  session.sources = { ...session.sources, restore: "reply" };
+  const file = buildSaveFile(session, { restore: "戻す試験はしていないとの返事でした" }, "要約");
+  const text = JSON.stringify(file);
+  assert.equal(file.version, 1);
+  assert.equal(text.includes("suspicious"), false);
+  assert.equal(text.includes("AIへの指示"), false);
+  assert.deepEqual(Object.keys(file.items[0]).sort(), [
+    "itemId",
+    "lastYearAnswer",
+    "reasons",
+    "sources",
+    "states",
+    "summary",
+    "vendorAnswer",
+    "vendorQuestions",
+  ]);
+});
+
 test("保存と読み込み：状態と確認事項が戻り、終わった問診として返事を検証できる", () => {
   const file = JSON.parse(JSON.stringify(buildSaveFile(finishedSession(), {}, "要約")));
   const loaded = sessionFromSaveFile(file);

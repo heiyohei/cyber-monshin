@@ -42,18 +42,26 @@ export async function POST(request: Request) {
   const usage = emptyUsage();
   const startedAt = Date.now();
   try {
-    const { results, states, decided } = await verifyVendorReply(
+    const { results, states, decided, suspicious } = await verifyVendorReply(
       body.data.reply,
       vendorRequest,
       session.states,
       request.signal,
       usage,
     );
-    console.info("[verify-reply] 実測", { ...usage, ms: Date.now() - startedAt });
+    // 指示のような文の報告は、数だけログに出す（返事の本文も引用も残さない）
+    console.info("[verify-reply] 実測", {
+      ...usage,
+      ms: Date.now() - startedAt,
+      suspicious: suspicious.quotes.length,
+      droppedSuspicious: suspicious.dropped,
+    });
     session.states = states;
     session.sources = withReplySources(session.sources, decided);
     return Response.json({
       results,
+      // 返事に実在した、AI への指示のように読める文。画面で知らせるだけで、判定には使っていない
+      suspicious: suspicious.quotes,
       card: buildCard(itemOf(session), states, session.lastYearAnswer, session.sources),
       session: sealSession(session, secret),
     });

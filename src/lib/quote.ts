@@ -42,6 +42,25 @@ export function checkResults(
   });
 }
 
+// AI への指示のように読める文の報告。返事に実在する引用だけを残し、同じ文は1つにまとめる。
+// 画面で知らせるだけで、判定にも要件の読み取りにも使わない。捨てた数は呼び出し側がログに数だけ出す
+export function checkSuspicious(quotes: string[], reply: string): { quotes: string[]; dropped: number } {
+  const kept: string[] = [];
+  const seen = new Set<string>();
+  let dropped = 0;
+  for (const quote of quotes) {
+    if (!quoteExists(quote, reply)) {
+      dropped += 1;
+      continue;
+    }
+    const key = normalize(quote);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(quote);
+  }
+  return { quotes: kept, dropped };
+}
+
 // 1つの観点に要件が複数あるときは、甘くならない側にまとめる。
 // 1つでも満たさなければ「満たさない」、すべて満たすときだけ「満たす」
 export function viewpointResult(
