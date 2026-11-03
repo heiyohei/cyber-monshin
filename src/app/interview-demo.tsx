@@ -744,7 +744,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
-      <div className="lg:col-span-2 print:hidden">
+      <div className="flex flex-col gap-6 lg:col-span-2 print:hidden">
         {session ? (
           <details className="rounded-8 bg-solid-gray-50 px-4 py-3 text-std-16N-170 text-solid-gray-800">
             <summary className="cursor-pointer text-std-16B-170 focus-visible:focus-ring">
@@ -754,6 +754,41 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           </details>
         ) : (
           notice
+        )}
+        {!session && (
+          // 全幅に置くと流れが1行に収まり、下の「サンプルで試す」が最初の画面に近づく。くわしい説明はたたむ
+          <section
+            className="flex flex-col gap-2 rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4"
+            aria-labelledby="guide-heading"
+          >
+            <h2 id="guide-heading" className="text-std-20B-150 text-blue-900">
+              使い方の流れ
+            </h2>
+            <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-std-16N-170">
+              {["対策を選ぶ", "始め方を選ぶ", "質問に答える", "まとめを見る", "質問文を送って保存する", "返事を確かめる"].map(
+                (step, index, steps) => (
+                  <li key={step} className="flex items-center gap-2">
+                    <span className="text-std-16B-170">{step}</span>
+                    {index < steps.length - 1 && <span aria-hidden="true">→</span>}
+                  </li>
+                ),
+              )}
+            </ol>
+            <details>
+              <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">くわしい流れを見る</summary>
+              <ol className="mt-2 flex list-decimal flex-col gap-1 pl-6 text-std-16N-170">
+                <li>確かめる対策を1つ選びます（下の 1）。初めてなら、そのままで構いません</li>
+                <li>始め方を1つ選びます（下の 2）。まず試すだけなら「サンプルで試す」です</li>
+                <li>質問に答えます（5問まで）。答えるたびに、判定カードが変わります</li>
+                <li>問診のまとめと、診療が止まるおそれがあるところ、次にすることを見ます。説明用の1枚を印刷できます</li>
+                <li>質問文をコピーして、メールなどでベンダーに送ります。「続きを再開するためのファイル」も保存します</li>
+                <li>返事が届いたら、そのファイルを読み込んで、返事を確かめます</li>
+              </ol>
+              <p className="mt-2 text-std-16N-170 text-solid-gray-800">
+                5と6は、診療が止まるおそれがあるところが見つかったときだけです。
+              </p>
+            </details>
+          </section>
         )}
       </div>
 
@@ -796,23 +831,16 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
 
         {!session && !busy && (
           <div className="flex flex-col gap-6">
-            <section className={`flex flex-col gap-3 ${panelClass}`} aria-labelledby="start-sample">
-              <h2 id="start-sample" className="text-std-24B-150 text-solid-gray-900">
-                1. サンプルで試す
+            <section className="flex flex-col gap-2" aria-labelledby="choose-item">
+              <h2 id="choose-item" className="text-std-20B-150 text-solid-gray-900">
+                1. 確かめる対策を選ぶ
               </h2>
               <p className="text-std-16N-170">
-                {SAMPLE_HOSPITAL.name}の担当者になったつもりで、質問に答えてみてください。
-                {sampleDescription(item)}
+                いまは「{item.name}」（チェック項目 {checkItemNumbers(item)}）です。初めてなら、このままで構いません。
               </p>
-              <p className="text-std-16N-170 text-solid-gray-800">
-                実際の病院の情報は入れないでください。回答はこの画面を閉じると消えます。
-              </p>
-              <button type="button" onClick={() => start()} className={buttonClass}>
-                サンプルで試す
-              </button>
               <details className="rounded-8 border border-solid-gray-200 p-3">
                 <summary className="cursor-pointer text-std-16B-170 text-blue-900 underline focus-visible:focus-ring">
-                  確かめる対策を変える（いまは「{item.name}」）
+                  ほかの対策から選ぶ
                 </summary>
                 <fieldset className="mt-3 flex flex-col gap-2">
                   <legend className="sr-only">確かめる対策</legend>
@@ -854,81 +882,105 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 </fieldset>
               </details>
             </section>
-            <section className={`flex flex-col gap-3 ${panelClass}`} aria-labelledby="start-excel">
-              <h2 id="start-excel" className="text-std-24B-150 text-solid-gray-900">
-                2. 去年のチェックリスト（Excel）から始める
+            <section className="flex flex-col gap-3" aria-labelledby="choose-start">
+              <h2 id="choose-start" className="text-std-20B-150 text-solid-gray-900">
+                2. 始め方を1つ選ぶ
               </h2>
-              <p className="text-std-16N-170">
-                医療機関用と事業者用の2つを一緒に選ぶと、ベンダーの回答も読み取ります。Excel
-                はこの画面の中で読み、送るのは {checkItemNumbers(item)}（{item.name}）の回答だけです。
-              </p>
-              <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
-                Excel を読み込む
-                <input
-                  type="file"
-                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  multiple
-                  onChange={readExcel}
-                  className="sr-only"
-                />
-              </label>
-              {excelNotice && <p className="text-std-16N-170 text-solid-gray-800">{excelNotice}</p>}
-              {excel && (
-                <div className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
-                  <p className="text-std-16N-170">
-                    {excel.status === "read"
-                      ? `${checkItemNumbers(item)} の去年の回答を読み取りました。違っていれば選び直してください。`
-                      : `${checkItemNumbers(item)} の回答を読み取れませんでした（要確認）。去年の回答を選んでください。`}
-                  </p>
-                  <label htmlFor="last-year" className={labelClass}>
-                    {checkItemNumbers(item)} の去年の回答
-                  </label>
-                  <select
-                    id="last-year"
-                    value={excelAnswer}
-                    onChange={(event) => setExcelAnswer(event.target.value as LastYearAnswer)}
-                    className={fieldClass}
-                  >
-                    <option value="yes">はい</option>
-                    <option value="no">いいえ</option>
-                    <option value="unknown">わからない（要確認）</option>
-                  </select>
-                  {item.vendorCheckItem && (
-                    <>
-                      <label htmlFor="vendor-answer" className={labelClass}>
-                        事業者用チェックリスト {item.vendorCheckItem.no} の、ベンダーの回答
-                      </label>
-                      <select
-                        id="vendor-answer"
-                        value={excelVendor}
-                        onChange={(event) => setExcelVendor(event.target.value as VendorAnswer)}
-                        className={fieldClass}
-                      >
-                        {(["yes", "no", "not_applicable", "unknown"] as const).map((value) => (
-                          <option key={value} value={value}>
-                            {VENDOR_LABELS[value]}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-                  <button type="button" onClick={() => start(excelAnswer, excelVendor)} className={buttonClass}>
-                    この回答で問診を始める
-                  </button>
-                </div>
-              )}
-            </section>
-            <section className={`flex flex-col gap-3 ${panelClass}`} aria-labelledby="start-resume">
-              <h2 id="start-resume" className="text-std-24B-150 text-solid-gray-900">
-                3. 保存したファイルから続ける
-              </h2>
-              <p className="text-std-16N-170">
-                ベンダーの返事が届いたら、前に保存した「続きを再開するためのファイル」を読み込んで、返事の確認から続けられます。
-              </p>
-              <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
-                続きを再開するためのファイルを読み込む
-                <input type="file" accept="application/json,.json" onChange={loadResult} className="sr-only" />
-              </label>
+              <p className="text-std-16N-170">次の3つのうち、自分に合うものを1つ選んで進めます。</p>
+              <section className={`flex flex-col gap-3 ${panelClass}`}>
+                <h3 id="start-sample" className="text-std-18B-160 text-solid-gray-900">
+                  サンプルで試す
+                </h3>
+                <p className="text-std-16B-170">まず使い方を試したい方（架空の病院で試します）</p>
+                <p className="text-std-16N-170">
+                  {SAMPLE_HOSPITAL.name}の担当者になったつもりで、質問に答えてみてください。
+                  {sampleDescription(item)}
+                </p>
+                <button type="button" onClick={() => start()} className={buttonClass}>
+                  サンプルで試す
+                </button>
+                <p className="text-std-16N-170 text-solid-gray-800">
+                  実際の病院の情報は入れないでください。回答はこの画面を閉じると消えます。
+                </p>
+              </section>
+              <section className={`flex flex-col gap-3 ${panelClass}`}>
+                <h3 id="start-excel" className="text-std-18B-160 text-solid-gray-900">
+                  去年のチェックリスト（Excel）から始める
+                </h3>
+                <p className="text-std-16B-170">去年のチェックリストの Excel ファイルがある方</p>
+                <p className="text-std-16N-170">
+                  医療機関用と事業者用の2つを一緒に選ぶと、ベンダーの回答も読み取ります。Excel
+                  はこの画面の中で読み、AI へ送るのは {checkItemNumbers(item)}（{item.name}）の回答だけです。
+                </p>
+                <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
+                  Excel を読み込む
+                  <input
+                    type="file"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    multiple
+                    onChange={readExcel}
+                    className="sr-only"
+                  />
+                </label>
+                {excelNotice && <p className="text-std-16N-170 text-solid-gray-800">{excelNotice}</p>}
+                {excel && (
+                  <div className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
+                    <p className="text-std-16N-170">
+                      {excel.status === "read"
+                        ? `${checkItemNumbers(item)} の去年の回答を読み取りました。違っていれば選び直してください。`
+                        : `${checkItemNumbers(item)} の回答を読み取れませんでした（要確認）。去年の回答を選んでください。`}
+                    </p>
+                    <label htmlFor="last-year" className={labelClass}>
+                      {checkItemNumbers(item)} の去年の回答
+                    </label>
+                    <select
+                      id="last-year"
+                      value={excelAnswer}
+                      onChange={(event) => setExcelAnswer(event.target.value as LastYearAnswer)}
+                      className={fieldClass}
+                    >
+                      <option value="yes">はい</option>
+                      <option value="no">いいえ</option>
+                      <option value="unknown">わからない（要確認）</option>
+                    </select>
+                    {item.vendorCheckItem && (
+                      <>
+                        <label htmlFor="vendor-answer" className={labelClass}>
+                          事業者用チェックリスト {item.vendorCheckItem.no} の、ベンダーの回答
+                        </label>
+                        <select
+                          id="vendor-answer"
+                          value={excelVendor}
+                          onChange={(event) => setExcelVendor(event.target.value as VendorAnswer)}
+                          className={fieldClass}
+                        >
+                          {(["yes", "no", "not_applicable", "unknown"] as const).map((value) => (
+                            <option key={value} value={value}>
+                              {VENDOR_LABELS[value]}
+                            </option>
+                          ))}
+                        </select>
+                      </>
+                    )}
+                    <button type="button" onClick={() => start(excelAnswer, excelVendor)} className={buttonClass}>
+                      この回答で問診を始める
+                    </button>
+                  </div>
+                )}
+              </section>
+              <section className={`flex flex-col gap-3 ${panelClass}`}>
+                <h3 id="start-resume" className="text-std-18B-160 text-solid-gray-900">
+                  保存したファイルから続ける
+                </h3>
+                <p className="text-std-16B-170">前に保存した「続きを再開するためのファイル」がある方</p>
+                <p className="text-std-16N-170">
+                  ベンダーの返事が届いたら、このファイルを読み込みます。返事を確かめるところから続けられます。
+                </p>
+                <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
+                  続きを再開するためのファイルを読み込む
+                  <input type="file" accept="application/json,.json" onChange={loadResult} className="sr-only" />
+                </label>
+              </section>
             </section>
           </div>
         )}
