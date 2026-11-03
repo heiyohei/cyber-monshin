@@ -1,7 +1,7 @@
 import { MANUAL, PLANNING } from "./sources.ts";
 import type { FocusItem } from "./types.ts";
 
-// 診療を止めない備え（3-①、3-③）。観点と判定の基準は heiyo の承認を得てから公開する
+// 診療を止めない備え（3-①、3-③）。観点と判定の基準は heiyo の承認を得た（2026-11-03）
 export const CONTINUITY_ITEM = {
   id: "continuity",
   name: "診療を止めない備え",

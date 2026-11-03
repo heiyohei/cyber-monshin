@@ -1,7 +1,7 @@
 import { MANUAL, OPERATION } from "./sources.ts";
 import type { FocusItem } from "./types.ts";
 
-// アカウントと権限（2-④、2-⑤、2-⑧、2-⑪、2-⑫）。観点と判定の基準は heiyo の承認を得てから公開する
+// アカウントと権限（2-④、2-⑤、2-⑧、2-⑪、2-⑫）。観点と判定の基準は heiyo の承認を得た（2026-11-03）
 export const ACCOUNTS_ITEM = {
   id: "accounts",
   name: "アカウントと権限",

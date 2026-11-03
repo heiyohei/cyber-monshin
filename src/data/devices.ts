@@ -1,7 +1,7 @@
 import { MANUAL, OPERATION, PLANNING } from "./sources.ts";
 import type { FocusItem } from "./types.ts";
 
-// 機器と外部接続の把握（2-①、2-②、2-⑭）。観点と判定の基準は heiyo の承認を得てから公開する
+// 機器と外部接続の把握（2-①、2-②、2-⑭）。観点と判定の基準は heiyo の承認を得た（2026-11-03）
 export const DEVICES_ITEM = {
   id: "devices",
   name: "機器と外部接続の把握",
