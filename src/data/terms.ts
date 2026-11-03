@@ -92,7 +92,6 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
   },
   {
     term: "アカウント",
-    aliases: ["ID"],
     short: "システムに入るための、利用者1人1人の登録のこと。ログインの名前（ID）とパスワードが組になっています。",
   },
   {

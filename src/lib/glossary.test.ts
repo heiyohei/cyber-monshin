@@ -45,8 +45,8 @@ test("用語の区切り：別の用語どうしは重ならずに並ぶ", () =>
 });
 
 test("用語の区切り：英数字の用語は英単語の一部に当てない", () => {
-  assert.deepEqual(shape(splitByTerms("IDとパスワード")), ["[ID→アカウント]", "とパスワード"]);
-  assert.deepEqual(shape(splitByTerms("VIDEOを見る")), ["VIDEOを見る"]);
+  assert.deepEqual(shape(splitByTerms("EOS の対象となった機器")), ["[EOS→サポート終了]", " の対象となった機器"]);
+  assert.deepEqual(shape(splitByTerms("VIDEOSを見る")), ["VIDEOSを見る"]);
   assert.deepEqual(shape(splitByTerms("VPN 装置等の脆弱性")), ["[VPN→VPN]", " 装置等の", "[脆弱性→脆弱性]"]);
 });
 
