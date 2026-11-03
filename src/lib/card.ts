@@ -1,10 +1,12 @@
 import { BACKUP_ITEM } from "../data/backup.ts";
+import { computeResult, type Result } from "./result.ts";
 import { computeBackupVerdict, VERDICT_LABELS, type Verdict, type ViewpointId, type ViewpointStates, type ViewpointStatus } from "./verdict.ts";
 
 export type Card = {
   verdict: Verdict;
   label: string;
   viewpoints: { id: ViewpointId; name: string; status: ViewpointStatus; evidence: string }[];
+  result: Result;
 };
 
 // 根拠は固定データだけから作る。判定もここで計算し直す。
@@ -20,5 +22,6 @@ export function buildCard(states: ViewpointStates, lastYearAnswer: string): Card
       status: states[viewpoint.id],
       evidence: viewpoint.evidence,
     })),
+    result: computeResult(states),
   };
 }

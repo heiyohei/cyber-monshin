@@ -47,6 +47,49 @@ export const BACKUP_ITEM = {
   viewpoints: { id: ViewpointId; name: string; goal: string; evidence: string }[];
 };
 
+export type NextSteps = { free: string; vendor: string; budget: string };
+
+// 止まる穴の順位と次の一手。Claude には渡さず、コードが選ぶ。
+// 順位は1が最も影響が大きい。費用の金額は示さない
+export const BACKUP_RESULTS: Record<ViewpointId, { impactRank: number; hole: string; nextSteps: NextSteps }> = {
+  acquire: {
+    impactRank: 1,
+    hole: "データの控えが取られていない、または取られているか分からない",
+    nextSteps: {
+      free: "バックアップの作業報告が届いているか、ベンダーからの報告書で確かめる",
+      vendor: "どのデータを、どのくらいの頻度で控えているかを聞く",
+      budget: "控えを取る仕組みがなければ、次のシステム更改で入れることを検討する",
+    },
+  },
+  isolate: {
+    impactRank: 2,
+    hole: "控えが攻撃の届かない場所に分けられておらず、一緒に使えなくなるおそれがある",
+    nextSteps: {
+      free: "控えを保存している機器がどこにあり、ふだんつながったままかを院内で確かめる",
+      vendor: "攻撃が届かない場所に分けて保管しているかを聞く",
+      budget: "切り離した場所に保管する仕組みを、次のシステム更改で検討する",
+    },
+  },
+  restore: {
+    impactRank: 3,
+    hole: "控えから実際に戻せるかを確かめていない",
+    nextSteps: {
+      free: "最後に戻す確認をした日を、作業報告や記録で探す",
+      vendor: "戻す確認をしたことがあるか、次はいつできるかを聞く",
+      budget: "定期的に戻す確認をする作業を、保守契約に入れることを検討する",
+    },
+  },
+  procedure: {
+    impactRank: 4,
+    hole: "誰が何をすれば戻せるかが決まっていない",
+    nextSteps: {
+      free: "戻す手順の文書が院内にあるか、置き場所を確かめる",
+      vendor: "戻す手順の文書を共有してもらえるかを聞く",
+      budget: "手順書の作成や戻す訓練を、保守契約に入れることを検討する",
+    },
+  },
+};
+
 // 保存ファイルができるまでの、固定のサンプルの確認事項。
 export const SAMPLE_VENDOR_QUESTION = {
   question:
