@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
-import { buildSaveFile, sessionFromSaveFile } from "./save-file.ts";
+import { computeResult } from "./result.ts";
+import { buildSaveFile, SAVE_VERSION, sessionFromSaveFile } from "./save-file.ts";
 import { createSession, vendorRequestFor } from "./session.ts";
+import { computeVerdict } from "./verdict.ts";
 
 function finishedSession() {
   const session = createSession(BACKUP_ITEM, "yes", "no_item");
@@ -69,4 +72,19 @@ test("読み込み：形式、版、値が正しくないファイルを拒否�
     },
   ];
   for (const input of broken) assert.equal(sessionFromSaveFile(input), null);
+});
+
+// e2e テスト（e2e/load-result.spec.ts）が読み込む架空の保存ファイル。スキーマを変えたときに古くならないよう、ここで照らす
+test("e2e の架空の保存ファイル：今のスキーマで読み込め、e2e が照合する判定と穴になる", () => {
+  const file = JSON.parse(readFileSync(new URL("../../e2e/fixtures/saved-result-v1.json", import.meta.url), "utf8"));
+  assert.equal(file.version, SAVE_VERSION);
+  const loaded = sessionFromSaveFile(file);
+  assert.ok(loaded);
+  assert.equal(loaded.session.itemId, BACKUP_ITEM.id);
+  assert.equal(computeVerdict(BACKUP_ITEM, loaded.session.states), "paper_only");
+  assert.deepEqual(
+    computeResult(BACKUP_ITEM, loaded.session.states).holes.map((hole) => hole.viewpointId),
+    ["isolate", "restore"],
+  );
+  assert.equal(vendorRequestFor(loaded.session)?.requirements.length, 2);
 });
