@@ -102,4 +102,9 @@ export const UPDATE_ITEM = {
   ],
   // サンプルでは、事業者が「対象外」と答えている（対象外のすき間を見せるため）
   sample: { lastYearAnswer: "yes", vendorAnswer: "not_applicable" },
+  photoHints: [
+    "Windows の更新の画面（最後に更新した日が分かるもの）",
+    "パソコンやサーバーの、Windows などの種類と版（バージョン）が分かる画面",
+    "ベンダーの作業報告書のうち、更新について書かれた欄",
+  ],
 } as const satisfies FocusItem;

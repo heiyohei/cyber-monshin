@@ -37,6 +37,8 @@ export type InterviewSession = {
   vendorQuestions: VendorQuestion[];
   finished: boolean;
   termCount?: number;
+  // 写真や画面で答えた回数。署名つきで数えるので、ブラウザ側で書き換えられない
+  imageCount?: number;
 };
 
 export type SealedSession = { payload: string; signature: string };

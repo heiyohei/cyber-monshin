@@ -28,6 +28,8 @@ export type FocusItem = {
   primaryViewpoints: readonly string[];
   viewpoints: readonly ViewpointDef[];
   sample: { lastYearAnswer: "yes" | "no" | "unknown"; vendorAnswer: "yes" | "no" | "not_applicable" | "no_item" | "unknown" };
+  // 写真や画面で答えるときの例。この項目がある重点項目だけ、画面に「写真や画面で答える」を出す
+  photoHints?: readonly string[];
 };
 
 // まだ作っていない重点項目。画面では「今後の拡張」と示す

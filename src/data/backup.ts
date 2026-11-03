@@ -97,4 +97,9 @@ export const BACKUP_ITEM = {
   ],
   // 事業者用チェックリストには 3-② に当たる項目がない
   sample: { lastYearAnswer: "yes", vendorAnswer: "no_item" },
+  photoHints: [
+    "バックアップのソフトの履歴の画面（最後に成功した日時や、取る間隔が分かるもの）",
+    "バックアップを保存している機器の写真（外付けのハードディスク、テープなど）",
+    "ベンダーの作業報告書のうち、バックアップについて書かれたページ",
+  ],
 } as const satisfies FocusItem;
