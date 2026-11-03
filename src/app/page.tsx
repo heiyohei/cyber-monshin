@@ -1,3 +1,4 @@
+import { SOURCES } from "@/data/backup";
 import { SAMPLE_HOSPITAL } from "@/data/sample";
 import { buildCard } from "@/lib/card";
 import { initialStates } from "@/lib/verdict";
@@ -24,13 +25,27 @@ export default function Home() {
         <li>厚生労働省の公式ツールではありません。</li>
         <li>すべての対策を確かめるものではありません。今回はバックアップと復旧だけを確かめます。ほかの項目は今後の拡張です。</li>
         <li>患者情報は入力しないでください。回答はこのサイトに保存しませんが、処理のため AI の Claude を提供する Anthropic 社へ送ります。</li>
-        <li>黒戸記念病院と黒戸町は架空です。開発中の画面で、根拠は仮の文面です。</li>
+        <li>黒戸記念病院と黒戸町は架空です。</li>
       </ul>
 
       <InterviewDemo initialCard={buildCard(initialStates(), SAMPLE_HOSPITAL.lastYearAnswer)} />
 
-      <footer className="border-t border-solid-gray-200 pt-4 text-dns-14N-130 text-solid-gray-800">
-        画面は、デジタル庁デザインシステムのデザイントークン（MIT License）を使って作成しました。デジタル庁が作成、提供するものではありません。
+      <footer className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4 text-dns-14N-130 text-solid-gray-800">
+        <p>
+          出典：厚生労働省の次の資料をもとに作成しました（公共データ利用規約 第1.0版）。根拠の文は原文の引用で、質問、判定の基準、次の一手、言い換えは本アプリが加工したものです。
+        </p>
+        <ul className="list-disc pl-5">
+          {SOURCES.map((source) => (
+            <li key={source.url}>
+              <a href={source.url} className="text-blue-900 underline focus-visible:focus-ring">
+                {source.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p>
+          画面は、デジタル庁デザインシステムのデザイントークン（MIT License）を使って作成しました。厚生労働省とデジタル庁が作成、提供するものではありません。
+        </p>
       </footer>
     </main>
   );

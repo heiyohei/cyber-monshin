@@ -1,50 +1,94 @@
 import type { Requirement } from "@/lib/quote";
 import type { ViewpointId } from "@/lib/verdict";
 
-// 根拠の本文は仮の文面。マニュアルの原文から固定データを作るときに差し替える。
+export type Evidence = { id: string; text: string; source: string };
+
+// 根拠は厚生労働省の公開資料の原文の引用。ページは資料に印刷された番号。
+// 引用は PDF から取り出した原文と照合した（2026-11-03）
+export const SOURCES = [
+  {
+    title: "医療機関・薬局におけるサイバーセキュリティ対策チェックリスト（令和8年度版）",
+    url: "https://www.mhlw.go.jp/content/10808000/001716185.pdf",
+  },
+  {
+    title: "医療機関・薬局におけるサイバーセキュリティ対策チェックリストマニュアル～医療機関・薬局・事業者向け～（令和8年度版）",
+    url: "https://www.mhlw.go.jp/content/10808000/001716186.pdf",
+  },
+  {
+    title: "医療情報システムの安全管理に関するガイドライン 第7.0版 システム運用編",
+    url: "https://www.mhlw.go.jp/content/10808000/001716295.pdf",
+  },
+] as const;
+
+const MANUAL = "チェックリストマニュアル（令和8年度版）";
+const OPERATION = "安全管理ガイドライン 第7.0版 システム運用編";
+
 export const BACKUP_ITEM = {
   id: "backup",
   name: "バックアップと復旧",
   checkItem: "3-②",
+  checkItemText:
+    "インシデント発生時に診療を継続するために必要な情報を検討し、バックアップを確保のうえ、復旧手順を確認している。",
   firstQuestion: {
     id: "backup_q1",
     text: "バックアップは、誰が、どのくらいの頻度で取っていますか？",
     why: "まず、データの控えが本当に取られているかを確かめます。",
   },
-  defaultEvidence: "仮の文面：控えがあっても、戻せなければ診療は再開できません。",
+  defaultEvidence: {
+    id: "ev_backup",
+    text: "非常時でも、稼働が損なわれた医療情報システムを復旧できるよう、情報システムやデータ等のバックアップを適切に確保し、その復旧手順を整備・確認しておくことが求められます。",
+    source: `${MANUAL} 3-② 17ページ`,
+  },
   viewpoints: [
     {
       id: "acquire",
       name: "取得",
       goal: "データの控えを定期的に取っている",
-      evidence: "仮の文面：定期的に控えを取っていることが、復旧の出発点です。",
+      evidence: {
+        id: "ev_backup_acquire",
+        text: "システム運用担当者は、企画管理者が運用管理規程等に定めたルールに基づいて、適切にバックアップを確保し、非常時に利用可能な状態で管理することが求められる。",
+        source: `${OPERATION} 12.2 26ページ`,
+      },
     },
     {
       id: "restore",
       name: "戻す確認",
       goal: "控えから実際に戻せることを確かめたことがある",
-      evidence: "仮の文面：実際に戻してみるまで、控えが使えるとは言い切れません。",
+      evidence: {
+        id: "ev_backup_restore",
+        text: "（非常時に備えた対策として）…バックアップファイルの復旧テストなどを実施することが求められる。",
+        source: `${OPERATION} 11.1 25ページ`,
+      },
     },
     {
       id: "isolate",
       name: "切り離し",
       goal: "控えが攻撃の届かない場所に分けて保管されている",
-      evidence: "仮の文面：つながったままの控えは、攻撃で一緒に使えなくなることがあります。",
+      evidence: {
+        id: "ev_backup_isolate",
+        text: "バックアップデータの記録媒体を端末及びサーバ装置やネットワークから切り離して保管することが強く求められる。",
+        source: `${OPERATION} 18.1 44ページ`,
+      },
     },
     {
       id: "procedure",
       name: "手順",
       goal: "誰が何をすれば戻せるかが、手順として決まっている",
-      evidence: "仮の文面：手順がなければ、非常時に戻す作業が止まります。",
+      evidence: {
+        id: "ev_backup_procedure",
+        text: "復旧するための手順をあらかじめ検討し、BCP として定めておくこと",
+        source: `${OPERATION} 18.1 45ページ`,
+      },
     },
   ],
 } as const satisfies {
   id: string;
   name: string;
   checkItem: string;
+  checkItemText: string;
   firstQuestion: { id: string; text: string; why: string };
-  defaultEvidence: string;
-  viewpoints: { id: ViewpointId; name: string; goal: string; evidence: string }[];
+  defaultEvidence: Evidence;
+  viewpoints: { id: ViewpointId; name: string; goal: string; evidence: Evidence }[];
 };
 
 export type NextSteps = { free: string; vendor: string; budget: string };
