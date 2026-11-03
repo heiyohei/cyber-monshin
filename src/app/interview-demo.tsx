@@ -4,12 +4,14 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import type { Evidence } from "@/data/backup";
 import { SAMPLE_HOSPITAL } from "@/data/sample";
 import { PrintSheet } from "./print-sheet";
-import type { Card } from "@/lib/card";
+import { buildCard, type Card } from "@/lib/card";
+import { readBackupAnswer, type ExcelReading } from "@/lib/checklist-excel";
+import { initialStates } from "@/lib/verdict";
 import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
 import type { ReadResult } from "@/lib/quote";
 import { buildSaveFile } from "@/lib/save-file";
-import type { InterviewSession, SealedSession, VendorRequest } from "@/lib/session";
+import type { InterviewSession, LastYearAnswer, SealedSession, VendorRequest } from "@/lib/session";
 
 type Question = { text: string; why: string; options: string[] };
 type ServerEvent = InterviewEvent | { type: "session"; session: SealedSession };
@@ -115,6 +117,8 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [error, setError] = useState("");
   const [canContinue, setCanContinue] = useState(false);
   const [warning, setWarning] = useState<PersonalInfoWarning | null>(null);
+  const [excel, setExcel] = useState<ExcelReading | null>(null);
+  const [excelAnswer, setExcelAnswer] = useState<LastYearAnswer>("unknown");
   const [needsCode, setNeedsCode] = useState(false);
   const [code, setCode] = useState("");
 
@@ -195,11 +199,31 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     }
   }
 
-  function start() {
-    return sendInterview({
-      last_year_answer: SAMPLE_HOSPITAL.lastYearAnswer,
-      vendor_answer: SAMPLE_HOSPITAL.vendorAnswer,
-    });
+  function start(lastYearAnswer: LastYearAnswer = SAMPLE_HOSPITAL.lastYearAnswer) {
+    setCard(buildCard(initialStates(), lastYearAnswer));
+    // 事業者用チェックリストには 3-② に当たる項目がない
+    return sendInterview({ last_year_answer: lastYearAnswer, vendor_answer: "no_item" });
+  }
+
+  // Excel はこの画面の中だけで読み、サーバーへは送らない
+  async function readExcel(event: ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0];
+    event.target.value = "";
+    if (!selected) return;
+    setError("");
+    if (selected.size > 5_000_000) {
+      setError("ファイルが大きすぎます。チェックリストの Excel を選んでください。");
+      return;
+    }
+    try {
+      const { default: readExcelFile } = await import("read-excel-file/browser");
+      const reading = readBackupAnswer(await readExcelFile(selected));
+      setExcel(reading);
+      setExcelAnswer(reading.answer);
+    } catch {
+      setExcel({ status: "not_found", answer: "unknown" });
+      setExcelAnswer("unknown");
+    }
   }
 
   function saveResult() {
@@ -379,9 +403,49 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             <p className="text-std-16N-170 text-solid-gray-800">
               実際の病院の情報は入れないでください。回答はこの画面を閉じると消えます。
             </p>
-            <button type="button" onClick={start} className={buttonClass}>
+            <button type="button" onClick={() => start()} className={buttonClass}>
               サンプルで試す
             </button>
+            <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
+              <p className="text-std-16N-170">
+                去年のチェックリスト（医療機関用の Excel）から始めることもできます。Excel はこの画面の中で読み、送るのは
+                3-② の回答（はい／いいえ）だけです。
+              </p>
+              <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
+                Excel を読み込む
+                <input
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={readExcel}
+                  className="sr-only"
+                />
+              </label>
+              {excel && (
+                <div className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
+                  <p className="text-std-16N-170">
+                    {excel.status === "read"
+                      ? "3-② の去年の回答を読み取りました。違っていれば選び直してください。"
+                      : "3-② の回答を読み取れませんでした（要確認）。去年の回答を選んでください。"}
+                  </p>
+                  <label htmlFor="last-year" className={labelClass}>
+                    3-② の去年の回答
+                  </label>
+                  <select
+                    id="last-year"
+                    value={excelAnswer}
+                    onChange={(event) => setExcelAnswer(event.target.value as LastYearAnswer)}
+                    className={fieldClass}
+                  >
+                    <option value="yes">はい</option>
+                    <option value="no">いいえ</option>
+                    <option value="unknown">わからない（要確認）</option>
+                  </select>
+                  <button type="button" onClick={() => start(excelAnswer)} className={buttonClass}>
+                    この回答で問診を始める
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
               <p className="text-std-16N-170">
                 ベンダーの返事が届いたら、前に保存した結果を読み込んで続きから確かめられます。
