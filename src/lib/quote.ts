@@ -42,6 +42,35 @@ export function checkResults(
   });
 }
 
+// AI への指示のように読める文の報告。返事に実在する引用だけを残し、同じ文は1つにまとめる。
+// 画面で知らせるだけで、判定にも要件の読み取りにも使わない。捨てた数は呼び出し側がログに数だけ出す
+export function checkSuspicious(quotes: string[], reply: string): { quotes: string[]; dropped: number } {
+  const kept: string[] = [];
+  const seen = new Set<string>();
+  let dropped = 0;
+  for (const quote of quotes) {
+    if (!quoteExists(quote, reply)) {
+      dropped += 1;
+      continue;
+    }
+    const key = normalize(quote);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(quote);
+  }
+  return { quotes: kept, dropped };
+}
+
+// 報告の引用と、要件の根拠の引用（確かめたあとのもの）が重なっているか（どちらかが他方を含む）。
+// 重なっていれば、画面で「読み取りに使っていない」と言い切らず、返事と見比べるよう促すための印。判定には使わない
+export function quotesOverlap(results: ReadResult[], suspicious: string[]): boolean {
+  const evidence = results.map((result) => normalize(result.quote)).filter((quote) => quote.length > 0);
+  return suspicious.some((quote) => {
+    const normalized = normalize(quote);
+    return normalized.length > 0 && evidence.some((item) => item.includes(normalized) || normalized.includes(item));
+  });
+}
+
 // 1つの観点に要件が複数あるときは、甘くならない側にまとめる。
 // 1つでも満たさなければ「満たさない」、すべて満たすときだけ「満たす」
 export function viewpointResult(

@@ -113,6 +113,29 @@ test("読み込み：版3、版1に印があるもの、印の形や ID が正�
   for (const input of broken) assert.equal(sessionFromSaveFile(input), null, JSON.stringify(input).slice(0, 80));
 });
 
+// 返事の中の AI への指示のように読める文の報告は、画面で知らせるだけ。保存ファイルには、報告も引用の文も入らない
+test("保存：返事の中の指示のような文の報告は入らない", () => {
+  const session = finishedSession();
+  session.sources = { ...session.sources, restore: "reply" };
+  const file = buildSaveFile(session, { restore: "戻す試験はしていないとの返事でした" }, "要約");
+  const text = JSON.stringify(file);
+  // 版2（「やった」印の done が入る）になっても、報告の項目は増えない
+  assert.equal(file.version, SAVE_VERSION);
+  assert.equal(text.includes("suspicious"), false);
+  assert.equal(text.includes("AIへの指示"), false);
+  assert.deepEqual(Object.keys(file.items[0]).sort(), [
+    "done",
+    "itemId",
+    "lastYearAnswer",
+    "reasons",
+    "sources",
+    "states",
+    "summary",
+    "vendorAnswer",
+    "vendorQuestions",
+  ]);
+});
+
 test("保存と読み込み：状態と確認事項が戻り、終わった問診として返事を検証できる", () => {
   const file = JSON.parse(JSON.stringify(buildSaveFile(finishedSession(), {}, "要約")));
   const loaded = sessionFromSaveFile(file);
