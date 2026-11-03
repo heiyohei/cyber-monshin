@@ -142,6 +142,7 @@ Built with Claude: Japan 2026 の提出作品です（テーマ2「本来、誰�
 | Claude | 問診と返事の検証は Claude Opus 5.5（effort `medium`）、写真の読み取りは Claude Sonnet 5.5（effort `low`）、ことばの相談は Claude Haiku 5.5。役割ごとに、品質が保てる範囲で安いモデルを測って選んでいる。公式 TypeScript SDK、`strict` なツール定義、Structured Outputs、画像の読み取り |
 | Excel | [read-excel-file](https://gitlab.com/catamphetamine/read-excel-file)（MIT License）をブラウザの中で使用 |
 | デザイン | [@digital-go-jp/tailwind-theme-plugin](https://github.com/digital-go-jp/tailwind-theme-plugin)（MIT License、Copyright (c) 2023 デジタル庁）の色、文字、角丸。部品は[デジタル庁デザインシステム](https://design.digital.go.jp/dads/)の説明を参考に、このプロジェクトで書いたもの |
+| 開発時の確認 | [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview)（事務職員役のエージェント）と [@playwright/mcp](https://github.com/microsoft/playwright-mcp)（Apache-2.0 License。ブラウザの操作）。アプリの動作には使わない |
 
 ## 評価
 
@@ -166,6 +167,7 @@ Built with Claude: Japan 2026 の提出作品です（テーマ2「本来、誰�
 | サブエージェント | [reviewer](.claude/agents/reviewer.md) が、書いた本人とは別の文脈で実装を仕様と照合した。失敗時に画面が戻らない不具合などを見つけた。厚生労働省の資料から根拠の箇所を探す調査も任せ、引用は PDF の原文と照合した |
 | 評価 | 評価で、同じ観点の要件を後の結果で上書きする不具合を見つけた。甘くならない側にまとめるよう直した |
 | ブラウザでの確認 | 画面を操作して、問診、返事の検証、保存と再開を実際に通した |
+| Agent SDK と MCP（[eval/clerk.ts](eval/clerk.ts)） | IT に詳しくない事務職員役のエージェント（知っていることと話し方の癖を持つ2人）が、Playwright の MCP で実際の画面を操作して問診を受け、詰まった所と分からなかった言葉を報告する。使えるのはブラウザの操作だけで、このアプリの画面の外へは出られない。2人とも最後まで進み、判定カードの観点の状態は「本当の状態」とほぼ一致した。報告から、合言葉の欄が見つけにくい、選択肢を押しても送られない、観点名「取得」「切り離し」だけでは分からない、「分からない」と答えたのに結果が言い切っている、の4点などを直した。1人 約 $0.2、3〜4分 |
 
 ## 開発
 
