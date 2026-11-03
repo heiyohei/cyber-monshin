@@ -6,7 +6,7 @@ import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
 import type { Evidence, FocusItem } from "@/data/types";
 import { PrintSheet } from "./print-sheet";
 import { buildCard, statusLabel, vendorMessage, type Card } from "@/lib/card";
-import { readItemAnswer, readVendorAnswer, type ExcelReading } from "@/lib/checklist-excel";
+import { CONCERN_TEXTS, readAllItems, type ItemReading } from "@/lib/checklist-excel";
 import { initialStates, type ViewpointStatus } from "@/lib/verdict";
 import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
@@ -54,7 +54,7 @@ type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[
 type TermExchange = { question: string; answer: string };
 type RecentReading = { viewpointId: string; status: ViewpointStatus; reason: string };
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
-type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code";
+type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code" | "excel";
 // 送る前に、この画面の中で縮めた写真。dataUrl は表示に、data（base64）は送信に使う
 type PreparedImage = { dataUrl: string; data: string; width: number; height: number };
 // 返事の検証で状態か確認の出どころが変わった観点。結果の下に出して、何が変わったかを示す
@@ -163,6 +163,20 @@ const VENDOR_LABELS: Record<VendorAnswer, string> = {
   unknown: "わからない（要確認）",
 };
 
+// 去年の回答の言葉。Excel の一覧の表と、選択欄で同じ言葉を使う
+const LAST_YEAR_LABELS: Record<LastYearAnswer, string> = {
+  yes: "はい",
+  no: "いいえ",
+  unknown: "わからない（要確認）",
+};
+
+// 一覧の表のベンダーの回答の欄。読み込んでいない、項目がない、は「ベンダーがそう答えた」と読まれないよう、わけを書く
+function vendorCellLabel(vendor: ItemReading["vendor"]): string {
+  if (vendor.status === "no_sheet") return "事業者用を読み込んでいません";
+  if (vendor.status === "no_item") return "事業者用に項目がない";
+  return VENDOR_LABELS[vendor.answer];
+}
+
 // 判定ごとの色。デジタル庁のデザイントークンの色だけを使い、文字は濃い灰色で読みやすさを保つ
 const VERDICT_STYLES: Record<Card["verdict"], string> = {
   reviewing: "border-solid-gray-420 bg-solid-gray-50",
@@ -210,6 +224,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [card, setCard] = useState(initialCard);
   const [itemId, setItemId] = useState(initialCard.itemId);
   const item: FocusItem = getItem(itemId) ?? ITEMS[0];
+  // Excel の読み取りを待つ間に対策を変えても、読み終えた時点で選んでいる対策に結果を入れるための控え（chooseItem で更新する）
+  const itemIdRef = useRef(initialCard.itemId);
   const [session, setSession] = useState<SealedSession | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
   const [answer, setAnswer] = useState("");
@@ -245,10 +261,12 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   // 同じ文を続けて出しても読み上げられるよう、番号を付けて部品を作り直す
   const [imageNotice, setImageNotice] = useState<{ seq: number; text: string } | null>(null);
   const [imageOpen, setImageOpen] = useState(false);
-  const [excel, setExcel] = useState<ExcelReading | null>(null);
-  const [excelNotice, setExcelNotice] = useState("");
+  // Excel から読んだ重点項目5つの結果。対策を変えても捨てず、選択欄をその対策の結果に切り替える
+  const [excel, setExcel] = useState<ItemReading[] | null>(null);
   const [excelAnswer, setExcelAnswer] = useState<LastYearAnswer>("unknown");
   const [excelVendor, setExcelVendor] = useState<VendorAnswer>("unknown");
+  // いま選んでいる対策の、Excel の読み取り結果。Excel を読んでいなければ null
+  const excelCurrent = excel?.find((reading) => reading.itemId === item.id) ?? null;
   const [needsCode, setNeedsCode] = useState(false);
   const [code, setCode] = useState("");
   // 待っている間の案内と、読み上げソフトに伝える短い文。どちらも常に置いた領域の文字だけを切り替える
@@ -265,6 +283,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const imageRef = useRef<HTMLHeadingElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
+  // Excel の一覧の行から対策を選んだあと、その対策の読み取り結果の文へ焦点を移す
+  const excelRef = useRef<HTMLParagraphElement>(null);
   // 合言葉で止まった操作。確かめたあとに、同じ操作を続ける（同じボタンを2回押さなくて済むように）
   const retryRef = useRef<(() => void) | null>(null);
   const [codeNotice, setCodeNotice] = useState("");
@@ -287,6 +307,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       error: errorRef,
       image: imageRef,
       code: codeRef,
+      excel: excelRef,
     };
     const element = refs[focusTarget.target].current;
     if (!element) return;
@@ -435,10 +456,28 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     const chosen = getItem(id);
     if (!chosen) return;
     setItemId(id);
-    setCard(buildCard(chosen, initialStates(chosen), chosen.sample.lastYearAnswer));
-    // 読み取る項目が変わるので、Excel の結果は捨てる。黙って消さず、選び直しを促す
-    if (excel) setExcelNotice("確かめる対策を変えたので、Excel を選び直してください。読み取る項目が変わります。");
-    setExcel(null);
+    itemIdRef.current = id;
+    // Excel は5項目をまとめて読んであるので、捨てずに、選択欄と右のカードをその対策の読み取り結果に切り替える
+    if (!applyReading(excel, chosen)) {
+      setCard(buildCard(chosen, initialStates(chosen), chosen.sample.lastYearAnswer));
+    }
+  }
+
+  // Excel の一覧の行から対策を選ぶ。選んだあと、その対策の読み取り結果の文へ焦点を移す
+  function chooseFromTable(id: string) {
+    chooseItem(id);
+    requestFocus("excel");
+  }
+
+  // 選択欄（去年の回答、ベンダーの回答）と右のカードに、その対策の読み取り結果を入れる。利用者は選択欄から選び直せる。
+  // Excel を読んでいなければ何もしない（false を返す）
+  function applyReading(readings: ItemReading[] | null, target: FocusItem): boolean {
+    const reading = readings?.find((candidate) => candidate.itemId === target.id);
+    if (!reading) return false;
+    setExcelAnswer(reading.lastYear.answer);
+    setExcelVendor(reading.vendor.answer);
+    setCard(buildCard(target, initialStates(target), reading.lastYear.answer));
+    return true;
   }
 
   function start(
@@ -455,25 +494,23 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     event.target.value = "";
     if (selected.length === 0) return;
     setError("");
-    setExcelNotice("");
     if (selected.length > 2 || selected.some((file) => file.size > 5_000_000)) {
       showError("チェックリストの Excel を2つまで選んでください。1つ5MBまでです。");
       return;
     }
+    let readings: ItemReading[];
     try {
       const { default: readExcelFile } = await import("read-excel-file/browser");
-      // 医療機関用と事業者用の2つを一緒に選べる
+      // 医療機関用と事業者用の2つを一緒に選べる。重点項目5つをまとめて読み、一覧にする
       const sheets = (await Promise.all(selected.map((file) => readExcelFile(file)))).flat();
-      const reading = readItemAnswer(item, sheets);
-      setExcel(reading);
-      setExcelAnswer(reading.answer);
-      // 事業者用の項目がなければ「項目がない」。事業者用のシートがなければ選んでもらう
-      setExcelVendor(item.vendorCheckItem ? (readVendorAnswer(item, sheets)?.answer ?? "unknown") : "no_item");
+      readings = readAllItems(ITEMS, sheets);
     } catch {
-      setExcel({ status: "not_found", answer: "unknown" });
-      setExcelAnswer("unknown");
-      setExcelVendor(item.vendorCheckItem ? "unknown" : "no_item");
+      // Excel として読めないファイルなら、5項目とも要確認にして、画面で選んでもらう
+      readings = readAllItems(ITEMS, []);
     }
+    setExcel(readings);
+    // 読み終えた時点で選んでいる対策に入れる（待つ間に対策を変えていても、別の対策の回答を送らない）
+    applyReading(readings, getItem(itemIdRef.current) ?? item);
   }
 
   function saveResult() {
@@ -964,7 +1001,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 </h3>
                 <p className="text-std-16B-170">去年のチェックリストの Excel ファイルがある方</p>
                 <p className="text-std-16N-170">
-                  医療機関用と事業者用の2つを一緒に選ぶと、ベンダーの回答も読み取ります。Excel
+                  読み込むと、重点項目5つの去年の回答を一覧にします。医療機関用と、事業者用（ベンダーが記入したもの）の2つを一緒に選ぶと、ベンダーの回答も読み取ります。Excel
                   はこの画面の中で読み、AI へ送るのは {checkItemNumbers(item)}（{item.name}）の回答だけです。
                 </p>
                 <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
@@ -977,13 +1014,97 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                     className="sr-only"
                   />
                 </label>
-                {excelNotice && <p className="text-std-16N-170 text-solid-gray-800">{excelNotice}</p>}
                 {excel && (
-                  <div className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
+                  <div className="flex flex-col gap-2">
+                    {excel.every((reading) => reading.lastYear.status !== "read") ? (
+                      <p className="text-std-16N-170">
+                        このファイルから去年の回答を読み取れませんでした。去年のチェックリストの Excel
+                        か、確かめてください。5つの対策とも、下の欄で回答を選べます。
+                      </p>
+                    ) : (
+                      <p className="text-std-16N-170">
+                        気になる点がある対策から確かめるのがおすすめです。空欄でも、できているとは限りません。
+                      </p>
+                    )}
                     <p className="text-std-16N-170">
-                      {excel.status === "read"
+                      「この対策を選ぶ」を押すと、下の欄にその対策の去年の回答とベンダーの回答が入ります。そのあと「この回答で問診を始める」を押します。
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-left text-std-16N-170">
+                        <caption className="pb-2 text-left text-std-16B-170 text-solid-gray-900">
+                          去年の回答の一覧（重点項目5つ）
+                        </caption>
+                        <thead>
+                          <tr className="border-b-2 border-solid-gray-420">
+                            <th scope="col" className="w-[40%] py-2 pr-3 text-std-16B-170">
+                              対策（攻撃の流れ、チェック項目）
+                            </th>
+                            <th scope="col" className="w-[13%] py-2 pr-3 text-std-16B-170">去年の回答</th>
+                            <th scope="col" className="w-[19%] py-2 pr-3 text-std-16B-170">ベンダーの回答</th>
+                            <th scope="col" className="w-[28%] py-2 text-std-16B-170">気になる点</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {excel.map((reading) => {
+                            const choice = getItem(reading.itemId);
+                            if (!choice) return null;
+                            const chosen = choice.id === item.id;
+                            // 列は4つ。この画面の左の欄は幅が狭いので、チェック項目の番号と「この対策から始める」は対策の欄に入れる
+                            return (
+                              <tr
+                                key={choice.id}
+                                aria-current={chosen ? "true" : undefined}
+                                className={`border-b border-solid-gray-200 align-top ${chosen ? "bg-blue-50" : ""}`}
+                              >
+                                <td className="py-3 pr-3">
+                                  <div className="flex flex-col items-start gap-1">
+                                    <span className="text-std-16B-170">{choice.name}</span>
+                                    <span className="text-solid-gray-800">
+                                      攻撃の流れ：{choice.stage}
+                                      <br />
+                                      チェック項目 {checkItemNumbers(choice)}
+                                    </span>
+                                    {chosen && <span className="text-std-16B-170 text-blue-900">いま選んでいる対策</span>}
+                                    {/* 押しても問診はまだ始まらず、下の選択欄に入るだけなので「選ぶ」と言う。読み上げ名に対策の名前を含める */}
+                                    <button
+                                      type="button"
+                                      onClick={() => chooseFromTable(choice.id)}
+                                      className={`whitespace-nowrap ${secondaryClass}`}
+                                    >
+                                      この対策を選ぶ<span className="sr-only">（{choice.name}）</span>
+                                    </button>
+                                  </div>
+                                </td>
+                                {/* 短い言葉（はい、いいえ、対象外、項目がない）は途中で折り返さない。「わからない（要確認）」は折り返す */}
+                                <td className={`py-3 pr-3 ${reading.lastYear.answer === "unknown" ? "" : "whitespace-nowrap"}`}>
+                                  {LAST_YEAR_LABELS[reading.lastYear.answer]}
+                                </td>
+                                <td className={`py-3 pr-3 ${reading.vendor.status === "read" ? "whitespace-nowrap" : ""}`}>
+                                  {vendorCellLabel(reading.vendor)}
+                                </td>
+                                <td className="py-3">
+                                  {reading.concerns.map((concern) => (
+                                    <span key={concern} className="block">
+                                      {CONCERN_TEXTS[concern]}
+                                    </span>
+                                  ))}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {excelCurrent && (
+                  <div className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
+                    <p ref={excelRef} tabIndex={-1} className="text-std-16N-170 focus-visible:focus-ring">
+                      {excelCurrent.lastYear.status === "read"
                         ? `${checkItemNumbers(item)} の去年の回答を読み取りました。違っていれば選び直してください。`
                         : `${checkItemNumbers(item)} の回答を読み取れませんでした（要確認）。去年の回答を選んでください。`}
+                      {(excelCurrent.vendor.status === "ambiguous" || excelCurrent.vendor.status === "not_found") &&
+                        "ベンダーの回答は読み取れませんでした（要確認）。下で選んでください。"}
                     </p>
                     <label htmlFor="last-year" className={labelClass}>
                       {checkItemNumbers(item)} の去年の回答
@@ -991,7 +1112,12 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                     <select
                       id="last-year"
                       value={excelAnswer}
-                      onChange={(event) => setExcelAnswer(event.target.value as LastYearAnswer)}
+                      onChange={(event) => {
+                        const value = event.target.value as LastYearAnswer;
+                        setExcelAnswer(value);
+                        // 右のカードの「去年の回答」も、選び直した値にそろえる
+                        setCard(buildCard(item, initialStates(item), value));
+                      }}
                       className={fieldClass}
                     >
                       <option value="yes">はい</option>
