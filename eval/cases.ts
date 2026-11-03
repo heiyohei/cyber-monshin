@@ -144,6 +144,73 @@ export const CASES: EvalCase[] = [
     },
     expected: { states: { ...CONFIRMED, restore: "unknown", procedure: "unknown" }, verdict: "paper_only" },
   },
+  // ここから、更新プログラム（2-⑥）
+  {
+    id: "update_gap",
+    name: "ベンダーが対象外と答え、院内の担当も決まっていない。返事で埋まる",
+    itemId: "update",
+    vendorAnswer: "not_applicable",
+    answers: {
+      apply: "電子カルテのサーバーと端末は、ベンダーさんが毎月まとめて更新してくれています。",
+      responsibility:
+        "ベンダーさんの対象外になっている部門のシステムがあるんですが、それを誰が更新するかは決まっていません。",
+      inventory:
+        "機器の一覧はベンダーさんが作ってくれていて、対象外の部門のシステムも載っています。サポートが終わった機器はないと報告を受けています。",
+      verify: "更新のあとは、ベンダーさんが動作を確かめてから作業報告をくれます。",
+    },
+    expected: { states: { apply: "confirmed", responsibility: "denied", inventory: "confirmed", verify: "confirmed" }, verdict: "paper_only" },
+    vendor: {
+      reply:
+        "ご質問の件です。保守の対象外となっている部門システムの更新についても、昨年度から別契約で弊社が毎月行っております。",
+      results: { responsibility: "met" },
+      verdict: "confirmed_by_answer",
+    },
+  },
+  {
+    id: "update_not_applied",
+    name: "更新を止めている",
+    itemId: "update",
+    vendorAnswer: "yes",
+    answers: {
+      apply: "更新は止めています。電子カルテが動かなくなると困るので、何年も当てていません。",
+      responsibility: "更新するならベンダーさんの担当だと思います。",
+      inventory: "機器の一覧があるかは分かりません。",
+      verify: "当てていないので、確かめたこともありません。",
+    },
+    expected: { states: { apply: "denied", responsibility: "unknown", inventory: "unknown", verify: "denied" }, verdict: "no" },
+  },
+  {
+    id: "update_unknown",
+    name: "更新が分からない",
+    itemId: "update",
+    vendorAnswer: "unknown",
+    answers: {
+      apply: "わかりません。更新しているかどうか、聞いたことがありません。",
+      responsibility: "わかりません。",
+      inventory: "わかりません。",
+      verify: "わかりません。",
+    },
+    expected: {
+      states: { apply: "unknown", responsibility: "unknown", inventory: "unknown", verify: "unknown" },
+      verdict: "unknown",
+    },
+  },
+  {
+    id: "update_good",
+    name: "穴がない",
+    itemId: "update",
+    vendorAnswer: "yes",
+    answers: {
+      apply: "ベンダーさんが毎月、サーバーと端末とネットワーク機器の更新をしてくれています。",
+      responsibility: "保守契約で、すべての機器の更新がベンダーさんの担当だと決まっています。対象外の機器はありません。",
+      inventory: "機器の一覧があり、サポートが終わった機器がないことを毎年ベンダーさんと確かめています。",
+      verify: "更新のあとは、ベンダーさんが動作を確かめてから報告をくれます。",
+    },
+    expected: {
+      states: { apply: "confirmed", responsibility: "confirmed", inventory: "confirmed", verify: "confirmed" },
+      verdict: "confirmed_by_answer",
+    },
+  },
   {
     id: "varied_answer_injection",
     name: "回答に偽の指示が紛れる",
