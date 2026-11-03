@@ -50,7 +50,9 @@ type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[
 type TermExchange = { question: string; answer: string };
 type RecentReading = { viewpointId: string; status: keyof typeof STATUS_LABELS; reason: string };
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
-type FocusTarget = "question" | "summary" | "reply" | "error";
+type FocusTarget = "question" | "summary" | "reply" | "results" | "error";
+// 返事の検証で状態が変わった観点。結果の下に出して、何が変わったかを示す
+type ReplyChange = { viewpointId: string; name: string; before: keyof typeof STATUS_LABELS; after: keyof typeof STATUS_LABELS };
 
 // 通信が止まったときに、画面が「確認しています」のままにならないようにする
 const FETCH_TIMEOUT_MS = 90_000;
@@ -169,9 +171,14 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [finished, setFinished] = useState(false);
   const [summary, setSummary] = useState("");
   const [vendor, setVendor] = useState<VendorRequest | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"question" | "followUp" | null>(null);
   const [reply, setReply] = useState("");
   const [results, setResults] = useState<ReadResult[]>([]);
+  const [replyChanges, setReplyChanges] = useState<ReplyChange[]>([]);
+  const [replyVerdict, setReplyVerdict] = useState<{ before: string; after: string } | null>(null);
+  // 直前の強調が、問診の回答によるものか、ベンダーの返事によるものか
+  const [recentSource, setRecentSource] = useState<"answer" | "reply">("answer");
+  const [loadedNotice, setLoadedNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [canContinue, setCanContinue] = useState(false);
@@ -196,6 +203,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const questionRef = useRef<HTMLHeadingElement>(null);
   const summaryRef = useRef<HTMLHeadingElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
+  const resultsRef = useRef<HTMLHeadingElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const answerRef = useRef<HTMLTextAreaElement>(null);
 
@@ -207,7 +215,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   // 画面が切り替わってから焦点を移す。見出しに移せば、次に何をするかが読み上げでも分かる
   useEffect(() => {
     if (!focusTarget) return;
-    const refs = { question: questionRef, summary: summaryRef, reply: replyRef, error: errorRef };
+    const refs = { question: questionRef, summary: summaryRef, reply: replyRef, results: resultsRef, error: errorRef };
     const element = refs[focusTarget.target].current;
     if (!element) return;
     element.focus({ preventScroll: true });
@@ -241,6 +249,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     if (event.type === "viewpoint_updated") {
       setCard(event.card);
       setReasons((current) => ({ ...current, [event.viewpointId]: event.reason }));
+      setRecentSource("answer");
       setRecent((current) => [
         ...current.filter((item) => item.viewpointId !== event.viewpointId),
         { viewpointId: event.viewpointId, status: event.status, reason: event.reason },
@@ -405,7 +414,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     setBusy(true);
     setBusyMessage("保存したファイルを確かめています…");
     try {
-      const response = await postJson("/api/load-result", await selected.text());
+      const text = await selected.text();
+      const response = await postJson("/api/load-result", text);
       if (!response.ok) {
         await failFrom(response);
         return;
@@ -419,7 +429,19 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setVendor(data.vendor);
       setFinished(true);
       setResults([]);
-      requestFocus("reply");
+      setReplyChanges([]);
+      setReplyVerdict(null);
+      // 保存した日は表示にだけ使う。形式はサーバーで確かめ済みだが、日付が読めなければ出さない
+      const savedAt = new Date(String((JSON.parse(text) as { savedAt?: string }).savedAt ?? ""));
+      const when = Number.isNaN(savedAt.getTime())
+        ? "保存した結果"
+        : `${savedAt.getMonth() + 1}月${savedAt.getDate()}日に保存した結果`;
+      const next = data.vendor
+        ? `${when}を読み込みました。ベンダーの返事を下に貼り付けてください。`
+        : `${when}を読み込みました。ベンダーに聞くことはないので、返事を待つ必要はありません。`;
+      setLoadedNotice(next);
+      setLive(next);
+      requestFocus(data.vendor ? "reply" : "summary");
     } catch {
       showError(CONNECTION_ERROR);
     } finally {
@@ -427,17 +449,22 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     }
   }
 
-  async function copyQuestion() {
-    if (!vendor) return;
+  async function copyText(text: string, key: "question" | "followUp") {
     try {
-      await navigator.clipboard.writeText(vendor.question);
-      setCopied(true);
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
       setLive("質問文をコピーしました。");
-      setTimeout(() => setCopied(false), 3000);
+      setTimeout(() => setCopied(null), 3000);
     } catch {
       showError("コピーできませんでした。質問文を選んで、手でコピーしてください。");
     }
   }
+
+  // 返事の追加の質問を、そのまま送れる1つの文にまとめる
+  const followUpText = results
+    .filter((result) => result.follow_up)
+    .map((result, index) => `${index + 1}. ${result.follow_up}`)
+    .join("\n");
 
   // 個人や機器を特定できる形式があれば、送る前に止めて確かめてもらう
   function needsPersonalInfoCheck(text: string, target: PersonalInfoWarning["target"]): boolean {
@@ -533,22 +560,42 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       const checked: ReadResult[] = data.results;
       const nextCard: Card = data.card;
       setResults(checked);
+      // 返事で状態が変わった観点を集め、結果の下と判定カードの強調に使う
+      const changes: ReplyChange[] = nextCard.viewpoints.flatMap((viewpoint) => {
+        const before = card.viewpoints.find((item) => item.id === viewpoint.id)?.status ?? "not_asked";
+        return before === viewpoint.status
+          ? []
+          : [{ viewpointId: viewpoint.id, name: viewpoint.name, before, after: viewpoint.status }];
+      });
+      setReplyChanges(changes);
+      setReplyVerdict(card.label === nextCard.label ? null : { before: card.label, after: nextCard.label });
       setCard(nextCard);
       // 状態が変わった観点は、前の回答の理由を返事の読み取りに置き換える
-      setReasons((current) => {
-        const next = { ...current };
-        for (const result of checked) {
-          const viewpointId = vendor?.requirements.find((item) => item.id === result.requirement_id)?.viewpointId;
-          const status = nextCard.viewpoints.find((item) => item.id === viewpointId)?.status;
-          const changed =
-            (result.result === "met" && status === "confirmed") || (result.result === "not_met" && status === "denied");
-          if (viewpointId && changed) {
-            next[viewpointId] = result.plain;
-          }
-        }
-        return next;
-      });
+      const plainByViewpoint: Record<string, string> = {};
+      for (const result of checked) {
+        const viewpointId = vendor?.requirements.find((item) => item.id === result.requirement_id)?.viewpointId;
+        const status = nextCard.viewpoints.find((item) => item.id === viewpointId)?.status;
+        const changed =
+          (result.result === "met" && status === "confirmed") || (result.result === "not_met" && status === "denied");
+        if (viewpointId && changed) plainByViewpoint[viewpointId] = result.plain;
+      }
+      setReasons((current) => ({ ...current, ...plainByViewpoint }));
+      setRecentSource("reply");
+      setRecent(
+        changes.map((change) => ({
+          viewpointId: change.viewpointId,
+          status: change.after,
+          reason: plainByViewpoint[change.viewpointId] ?? "",
+        })),
+      );
       setSession(data.session);
+      setLoadedNotice("");
+      setLive(
+        changes.length === 0
+          ? "返事を読み取りました。観点の状態は変わりませんでした。"
+          : `返事を読み取りました。${changes.map((change) => `${change.name}は${STATUS_LABELS[change.after]}`).join("、")}。`,
+      );
+      requestFocus("results");
     } catch {
       showError(CONNECTION_ERROR);
     } finally {
@@ -939,7 +986,36 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 </p>
               </>
             )}
-            <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
+          </section>
+        )}
+
+        {finished && (
+          <section className={`flex flex-col gap-4 ${panelClass}`} aria-labelledby="flow-heading">
+            <h2 id="flow-heading" className="text-std-24B-150 text-solid-gray-900">
+              {vendor ? "この結果を使って、次の3つを順に行います" : "この結果を保存する、印刷する"}
+            </h2>
+            {vendor && (
+              <p className="text-std-16N-170">
+                ベンダーの返事は数日後に届くことが多いので、2 で保存してから画面を閉じて構いません。返事が届いたら、保存したファイルを読み込んで 3
+                に進みます。
+              </p>
+            )}
+
+            {vendor && (
+              <div className="flex flex-col gap-2">
+                <h3 className="text-std-20B-150 text-solid-gray-900">1. ベンダーに質問文を送る</h3>
+                <p className="text-std-16N-170">次の文章を、メールなどでそのままベンダーへ送ってください。</p>
+                <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">{vendor.question}</p>
+                <button type="button" onClick={() => copyText(vendor.question, "question")} className={secondaryClass}>
+                  {copied === "question" ? "コピーしました" : "質問文をコピーする"}
+                </button>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <h3 className="text-std-20B-150 text-solid-gray-900">
+                {vendor ? "2. 続きを再開するためのファイルを保存する" : "保存する、印刷する"}
+              </h3>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={saveResult} className={secondaryClass}>
                   続きを再開するためのファイルを保存する
@@ -949,68 +1025,115 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 </button>
               </div>
               <p className="text-std-16N-170 text-solid-gray-800">
-                保存するファイルは、このアプリにもう一度読み込んで、ベンダーの返事の確認から続けるためのものです（拡張子は .json）。Excel や Word では開けません。人に見せるときは「説明用の1枚を印刷する」を使ってください。ファイルには病院の弱いところの情報が入るので、院外に持ち出さないでください。病院名は入りません。
+                保存するファイルは、このアプリにもう一度読み込んで、ベンダーの返事の確認から続けるためのものです。Excel や Word
+                では開けません。人に見せるときは「説明用の1枚を印刷する」を使ってください。ファイルには病院の弱いところの情報が入るので、院外に持ち出さないでください。病院名は入りません。
               </p>
             </div>
-          </section>
-        )}
 
-        {vendor && (
-          <form onSubmit={submitReply} className="flex flex-col gap-3 border-t border-solid-gray-200 pt-6">
-            <h2 className="text-std-24B-150 text-solid-gray-900">ベンダーに確かめる</h2>
-            <p className="text-std-16N-170">次の文章をベンダーへ送り、届いた返事を下に貼り付けてください。</p>
-            <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">{vendor.question}</p>
-            <button type="button" onClick={copyQuestion} className={secondaryClass}>
-              {copied ? "コピーしました" : "質問文をコピーする"}
-            </button>
-            <label htmlFor="reply" className={labelClass}>
-              返事（4,000文字まで。病院名、担当者名、IP アドレスは消してください）
-            </label>
-            <textarea
-              id="reply"
-              ref={replyRef}
-              rows={5}
-              maxLength={4000}
-              value={reply}
-              onChange={(event) => {
-                setReply(event.target.value);
-                if (warning?.target === "reply") setWarning(null);
-              }}
-              className={fieldClass}
-            />
-            {warning?.target === "reply" && (
-              <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
-            )}
-            <details className="text-std-16N-170 text-solid-gray-800">
-              <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">AI に送る内容</summary>
-              <p className="mt-2 rounded-8 bg-solid-gray-50 p-4">
-                貼り付けた返事と、上の確認事項の文、確かめる要件を送ります。問診の回答、病院名、読み込んだファイルの中身は送りません。送った内容はこのサイトに保存しません。
-              </p>
-            </details>
-            <button type="submit" disabled={busy || !reply.trim()} className={buttonClass}>
-              返事を確かめる
-            </button>
-          </form>
-        )}
-
-        {results.length > 0 && (
-          <ul className="flex flex-col gap-3">
-            {results.map((result) => (
-              <li key={result.requirement_id} className={panelClass}>
-                <p className="text-std-18B-160">
-                  {vendor?.requirements.find((item) => item.id === result.requirement_id)?.text}：
-                  {RESULT_LABELS[result.result]}
-                </p>
-                {result.quote && (
-                  <blockquote className="mt-2 border-l-4 border-solid-gray-420 pl-3 text-std-16N-170 text-solid-gray-800">
-                    原文：{result.quote}
-                  </blockquote>
+            {vendor && (
+              <form onSubmit={submitReply} className="flex flex-col gap-3">
+                <h3 className="text-std-20B-150 text-solid-gray-900">3. 返事が届いたら、貼り付けて確かめる</h3>
+                {loadedNotice && (
+                  <p className="rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4 text-std-16B-170 text-blue-900">
+                    {loadedNotice}
+                  </p>
                 )}
-                <p className="mt-2 text-std-16N-170">{result.plain}</p>
-                {result.follow_up && <p className="mt-2 text-std-16N-170">追加の質問：{result.follow_up}</p>}
-              </li>
-            ))}
-          </ul>
+                <label htmlFor="reply" className={labelClass}>
+                  返事（4,000文字まで。病院名、担当者名、IP アドレスは消してください）
+                </label>
+                <textarea
+                  id="reply"
+                  ref={replyRef}
+                  rows={5}
+                  maxLength={4000}
+                  value={reply}
+                  onChange={(event) => {
+                    setReply(event.target.value);
+                    if (warning?.target === "reply") setWarning(null);
+                  }}
+                  className={fieldClass}
+                />
+                {warning?.target === "reply" && (
+                  <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
+                )}
+                <details className="text-std-16N-170 text-solid-gray-800">
+                  <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">AI に送る内容</summary>
+                  <p className="mt-2 rounded-8 bg-solid-gray-50 p-4">
+                    貼り付けた返事と、1
+                    の質問文、確かめたいことを送ります。問診の回答、病院名、読み込んだファイルの中身は送りません。送った内容はこのサイトに保存しません。
+                  </p>
+                </details>
+                <button type="submit" disabled={busy || !reply.trim()} className={buttonClass}>
+                  返事を確かめる
+                </button>
+              </form>
+            )}
+
+            {results.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <h3 ref={resultsRef} tabIndex={-1} className="text-std-20B-150 text-solid-gray-900 focus-visible:focus-ring">
+                  返事を読み取った結果
+                </h3>
+                <ul className="flex flex-col gap-3">
+                  {results.map((result) => (
+                    <li key={result.requirement_id} className="rounded-8 border border-solid-gray-200 p-4">
+                      <p className="text-std-18B-160">
+                        {vendor?.requirements.find((item) => item.id === result.requirement_id)?.text}：
+                        {RESULT_LABELS[result.result]}
+                      </p>
+                      {result.quote && (
+                        <blockquote className="mt-2 border-l-4 border-solid-gray-420 pl-3 text-std-16N-170 text-solid-gray-800">
+                          原文：{result.quote}
+                        </blockquote>
+                      )}
+                      <p className="mt-2 text-std-16N-170">{result.plain}</p>
+                      {result.follow_up && <p className="mt-2 text-std-16N-170">追加の質問：{result.follow_up}</p>}
+                    </li>
+                  ))}
+                </ul>
+                <section
+                  aria-label="返事で変わったこと"
+                  className="flex flex-col gap-2 rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4"
+                >
+                  <h4 className="text-std-16B-170 text-blue-900">返事で変わったこと（判定カードと上の一覧に反映）</h4>
+                  {replyChanges.length === 0 ? (
+                    <p className="text-std-16N-170">観点の状態は変わりませんでした。返事で答えていない点は、追加の質問で確かめます。</p>
+                  ) : (
+                    <ul className="flex flex-col gap-1 text-std-16N-170">
+                      {replyChanges.map((change) => (
+                        <li key={change.viewpointId}>
+                          <span className="text-std-16B-170">{change.name}</span>：{STATUS_LABELS[change.before]} →{" "}
+                          {STATUS_LABELS[change.after]}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {replyVerdict && (
+                    <p className="text-std-16B-170">
+                      判定が「{replyVerdict.before}」から「{replyVerdict.after}」に変わりました。
+                    </p>
+                  )}
+                </section>
+                {followUpText && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-std-16B-170">追加でベンダーに聞く質問文</p>
+                    <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">{followUpText}</p>
+                    <button type="button" onClick={() => copyText(followUpText, "followUp")} className={secondaryClass}>
+                      {copied === "followUp" ? "コピーしました" : "追加の質問文をコピーする"}
+                    </button>
+                  </div>
+                )}
+                <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-3">
+                  <p className="text-std-16N-170">
+                    返事を読み取った結果を残すには、もう一度ファイルを保存してください。前に保存したファイルは古い状態のままです。
+                  </p>
+                  <button type="button" onClick={saveResult} className={secondaryClass}>
+                    続きを再開するためのファイルを保存する（返事を反映した状態）
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
         )}
       </section>
 
@@ -1044,7 +1167,9 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               }`}
             >
               {recent.some((item) => item.viewpointId === viewpoint.id) && (
-                <p className="text-std-16B-170 text-blue-900">いまの回答で更新</p>
+                <p className="text-std-16B-170 text-blue-900">
+                  {recentSource === "reply" ? "ベンダーの返事で更新" : "いまの回答で更新"}
+                </p>
               )}
               <p className="text-std-16B-170">
                 {viewpoint.name}：{STATUS_LABELS[viewpoint.status]}
