@@ -170,3 +170,6 @@ samples/
 # 手元だけに置くレビューと案
 docs/review-*.md
 docs/ideas-*.md
+
+# e2e テストが失敗したときのスクリーンショットと動画
+e2e/results/
