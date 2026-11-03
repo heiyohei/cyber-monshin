@@ -12,7 +12,7 @@
 - lint：`npm run lint`
 - ビルド：`npm run build`
 - e2e テスト（ブラウザで画面を動かす。Claude を呼ばない組）：`npm run test:e2e`。画面や流れを変えたら通す
-- 有料の e2e（実際に Claude を呼ぶ組も含む。1回 約 $0.04）：`npm run test:e2e:paid`。問診や返事の流れを変えたときだけ1回通す
+- 有料の e2e（実際に Claude を呼ぶ組も含む。1回 約 $0.05）：`npm run test:e2e:paid`。問診や返事の流れ、または問診の画面の部品（質問、回答欄、選択肢、判定カード）を変えたときに1回通す
 - 公開前の確認：`npm run check:safety`
 - 評価：`npm run eval`（費用がかかるので、変更の効果を測るときに実行する）
 
