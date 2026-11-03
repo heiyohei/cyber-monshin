@@ -1828,7 +1828,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                       ))}
                     </ul>
                     <p className="text-std-16N-170">
-                      {suspiciousNoun(suspicious)}がなぜ入っていたかを、ベンダーに確かめてください。ひな形の文が残ったなど、誤って入ることもあります。
+                      {suspiciousNoun(suspicious)}がなぜ入っていたかを、ベンダーに確かめてください。
                     </p>
                   </div>
                 )}
