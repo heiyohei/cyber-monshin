@@ -115,6 +115,42 @@ const VENDOR_LABELS: Record<VendorAnswer, string> = {
   unknown: "わからない（要確認）",
 };
 
+// 判定ごとの色。デジタル庁のデザイントークンの色だけを使い、文字は濃い灰色で読みやすさを保つ
+const VERDICT_STYLES: Record<Card["verdict"], string> = {
+  reviewing: "border-solid-gray-420 bg-solid-gray-50",
+  confirmed_by_answer: "border-green-900 bg-green-50",
+  paper_only: "border-yellow-900 bg-yellow-50",
+  unknown: "border-solid-gray-800 bg-solid-gray-50",
+  no: "border-red-900 bg-red-50",
+};
+
+// 判定の意味を、観点の状態からコードで組み立てる。Claude には作らせない
+function verdictNote(card: Card, started: boolean): string {
+  const primaryIds = getItem(card.itemId)?.primaryViewpoints ?? [];
+  const primary = card.viewpoints.filter((viewpoint) => primaryIds.includes(viewpoint.id));
+  const others = card.viewpoints.filter((viewpoint) => !primaryIds.includes(viewpoint.id));
+  const names = (list: { name: string }[]) => list.map((viewpoint) => viewpoint.name).join("、");
+  const denied = others.filter((viewpoint) => viewpoint.status === "denied");
+  const unknown = others.filter((viewpoint) => viewpoint.status === "unknown");
+  const parts: string[] = [];
+  if (denied.length > 0) parts.push(`${names(denied)}ができていません`);
+  if (unknown.length > 0) parts.push(`${names(unknown)}はわからないままです`);
+  switch (card.verdict) {
+    case "reviewing":
+      return started
+        ? "まだ確かめていない観点があります。回答に応じて変わります。"
+        : "去年のチェックリストの回答です。問診を始めると、回答に応じて変わります。";
+    case "confirmed_by_answer":
+      return "すべての観点が回答で確認できました。実地の確認ではありません。";
+    case "paper_only":
+      return `${names(primary)}はできていますが、${parts.join("。")}。`;
+    case "no":
+      return `${names(primary)}ができていないため、「いいえ」になります。`;
+    case "unknown":
+      return `${names(primary)}ができているか分からないため、ベンダーに確かめる必要があります。`;
+  }
+}
+
 export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [card, setCard] = useState(initialCard);
   const [itemId, setItemId] = useState(initialCard.itemId);
@@ -619,7 +655,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             aria-label="直前の回答から読み取ったこと"
             className="flex flex-col gap-2 rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4"
           >
-            <h2 className="text-std-16B-170 text-blue-900">直前の回答から読み取ったこと（右の判定カードに反映）</h2>
+            <h2 className="text-std-16B-170 text-blue-900">直前の回答から読み取ったこと（判定カードに反映）</h2>
             <ul className="flex flex-col gap-1 text-std-16N-170">
               {recent.map((item) => (
                 <li key={item.viewpointId}>
@@ -868,13 +904,16 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
 
       <aside className={`flex flex-col gap-4 self-start ${panelClass}`} aria-label="判定">
         <p className="rounded-8 bg-solid-gray-50 px-3 py-2 text-std-16B-170 text-solid-gray-800">
-          判定カード：左の回答から読み取った内容で、自動で更新されます
+          判定カード：回答から読み取った内容で、自動で更新されます
         </p>
         <div aria-live="polite">
           <p className="text-std-16N-170 text-solid-gray-800">
             {card.itemName}（{checkItemNumbers(card)}）
           </p>
-          <p className="text-std-32B-150 text-solid-gray-900">{card.label}</p>
+          <div className={`mt-2 rounded-8 border-l-8 px-4 py-3 ${VERDICT_STYLES[card.verdict]}`}>
+            <p className="text-std-32B-150 text-solid-gray-900">{card.label}</p>
+            <p className="mt-1 text-std-16N-170 text-solid-gray-900">{verdictNote(card, session !== null)}</p>
+          </div>
           {card.checkItems.map((checkItem) => (
             <p key={checkItem.no} className="mt-2 text-std-16N-170 text-solid-gray-800">
               チェック項目 {checkItem.no}：{checkItem.text}

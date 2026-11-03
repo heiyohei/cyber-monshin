@@ -16,7 +16,7 @@ export type Card = {
 // 根拠は固定データだけから作る。判定もここで計算し直す。
 export function buildCard(item: FocusItem, states: ViewpointStates, lastYearAnswer: string): Card {
   const verdict = computeVerdict(item, states);
-  const lastYear = lastYearAnswer === "yes" ? "はい" : lastYearAnswer === "no" ? "いいえ" : "不明";
+  const lastYear = lastYearAnswer === "yes" ? "はい" : lastYearAnswer === "no" ? "いいえ" : "わからない";
   return {
     itemId: item.id,
     itemName: item.name,
