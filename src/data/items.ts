@@ -1,4 +1,7 @@
+import { ACCOUNTS_ITEM } from "./accounts.ts";
 import { BACKUP_ITEM } from "./backup.ts";
+import { CONTINUITY_ITEM } from "./continuity.ts";
+import { DEVICES_ITEM } from "./devices.ts";
 import type { FocusItem, PlannedItem } from "./types.ts";
 import { UPDATE_ITEM } from "./update.ts";
 
@@ -6,7 +9,7 @@ import { UPDATE_ITEM } from "./update.ts";
 export const ITEMS: readonly FocusItem[] = [UPDATE_ITEM, BACKUP_ITEM];
 
 // まだ作っていない重点項目。データはあっても、承認の前は選べない
-export const DRAFT_ITEMS: readonly FocusItem[] = [];
+export const DRAFT_ITEMS: readonly FocusItem[] = [DEVICES_ITEM, ACCOUNTS_ITEM, CONTINUITY_ITEM];
 
 export const PLANNED_ITEMS: readonly PlannedItem[] = [
   { id: "devices", name: "機器と外部接続の把握", stage: "入られる", checkItems: ["2-①", "2-②", "2-⑭"] },
