@@ -66,7 +66,7 @@ type TermExchange = { question: string; answer: string };
 // 直前の回答から読み取った観点。「これまでの質問と回答」に付ける読み取りと同じ形
 type RecentReading = HistoryReading;
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
-type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code" | "excel" | "term";
+type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code" | "excel" | "term" | "steps";
 // 送る前に、この画面の中で縮めた写真。dataUrl は表示に、data（base64）は送信に使う
 type PreparedImage = { dataUrl: string; data: string; width: number; height: number };
 // 返事の検証で状態か確認の出どころが変わった観点。結果の下に出して、何が変わったかを示す
@@ -300,6 +300,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const questionRef = useRef<HTMLHeadingElement>(null);
   const recentRef = useRef<HTMLElement>(null);
   const summaryRef = useRef<HTMLHeadingElement>(null);
+  // 「次にすること」の見出し。印を付けたあとの保存ボタンは押すと消えるので、焦点をここへ戻す
+  const stepsRef = useRef<HTMLHeadingElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const resultsRef = useRef<HTMLHeadingElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
@@ -333,17 +335,18 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       code: codeRef,
       excel: excelRef,
       term: termInputRef,
+      steps: stepsRef,
     };
     const element = refs[focusTarget.target].current;
     if (!element) return;
     element.focus({ preventScroll: true });
     // 次の質問の上には「直前の回答から読み取ったこと」が出るので、あればそこから見せる
     const top = focusTarget.target === "question" ? (recentRef.current ?? element) : element;
-    // Excel の一覧の行から選んだときと、ことばの相談の欄へ移すときは、周りが見えたまま最小限だけ動かす
+    // Excel の一覧の行から選んだとき、ことばの相談の欄へ移すとき、「次にすること」へ戻すときは、周りが見えたまま最小限だけ動かす
     const block =
       focusTarget.target === "error"
         ? "center"
-        : focusTarget.target === "excel" || focusTarget.target === "term"
+        : focusTarget.target === "excel" || focusTarget.target === "term" || focusTarget.target === "steps"
           ? "nearest"
           : "start";
     top.scrollIntoView({ block });
@@ -536,11 +539,22 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     return sendInterview({ item_id: item.id, last_year_answer: lastYearAnswer, vendor_answer: vendorAnswer });
   }
 
-  // 次にすることの「やった」印を付けたり外したりする。残っている件数を読み上げ用の領域に出す
+  // 次にすることの「やった」印を付けたり外したりする。残っている件数を読み上げ用の領域に出す。
+  // 保存し直しの案内は条件つきで出るので読まれないことがある。印が保存した状態と違うものになった最初の1回だけ、読み上げにも添える
   function toggleDone(stepId: string, checked: boolean) {
     const next = checked ? [...done.filter((id) => id !== stepId), stepId] : done.filter((id) => id !== stepId);
     setDone(next);
-    setLive(`残っていること ${countSteps(remainingSteps(card.result.nextSteps, next))}件。`);
+    const remaining = countSteps(remainingSteps(card.result.nextSteps, next));
+    const nextChanged = next.length !== savedDone.length || next.some((id) => !savedDone.includes(id));
+    const hint = !doneChanged && nextChanged ? "印を残すには、下の保存ボタンでファイルを保存してください。" : "";
+    setLive(`${checked ? "印を付けました" : "印を外しました"}。残っていることは、あと${remaining}件です。${hint}`);
+  }
+
+  // 「やった」の印を付けたあとの保存。押したボタンは保存すると消えるので、焦点を「次にすること」の見出しへ戻す
+  function saveResultAfterDone() {
+    saveResult();
+    setLive("ファイルを保存しました。");
+    requestFocus("steps");
   }
 
   // Excel はこの画面の中だけで読み、サーバーへは送らない
@@ -1616,13 +1630,15 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                   </p>
                 )}
                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                  <h3 className="text-std-20B-150 text-solid-gray-900">次にすること</h3>
+                  <h3 ref={stepsRef} tabIndex={-1} className="text-std-20B-150 text-solid-gray-900 focus-visible:focus-ring">
+                    次にすること
+                  </h3>
                   <p className="text-std-16B-170 text-solid-gray-800">
                     {`残っていること ${countSteps(remainingSteps(card.result.nextSteps, done))}件（全部で${countSteps(card.result.nextSteps)}件）`}
                   </p>
                 </div>
                 <p className="text-std-16N-170 text-solid-gray-800">
-                  終えたものには「やった」の印を付けてください。印は、保存するファイルと説明用の1枚に残るので、次の担当者に引き継げます。
+                  終えたものには「やった」の印を付けてください。印は保存するファイルに入るので、次の担当者が読み込めば続きから見られます。説明用の1枚には、残っていることの件数と一部が載ります。
                 </p>
                 {STEP_GROUPS.map((group) => (
                   <div key={group.key}>
@@ -1633,7 +1649,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                         const domId = `step-${step.id.replaceAll(".", "-")}`;
                         const checked = done.includes(step.id);
                         return (
-                          <li key={step.id} className={checked ? "text-solid-gray-800" : undefined}>
+                          <li key={step.id} className={checked ? "text-solid-gray-600" : undefined}>
                             <div className="flex items-start justify-between gap-3">
                               <span id={`${domId}-text`}>{step.text}</span>
                               <label
@@ -1663,9 +1679,9 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 {doneChanged && (
                   <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-3">
                     <p className="text-std-16N-170">
-                      「やった」の印を残すには、もう一度ファイルを保存してください。保存するまでは、画面を閉じると印が消えます。
+                      「やった」の印を残すには、ファイルを保存してください。保存しないまま画面を閉じると、印は消えます。
                     </p>
-                    <button type="button" onClick={saveResult} className={secondaryClass}>
+                    <button type="button" onClick={saveResultAfterDone} className={secondaryClass}>
                       続きを再開するためのファイルを保存する（「やった」の印を反映した状態）
                     </button>
                   </div>
@@ -1715,7 +1731,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 </button>
               </div>
               <p className="text-std-16N-170 text-solid-gray-800">
-                保存するファイルは、このアプリにもう一度読み込んで、ベンダーの返事の確認から続けるためのものです。Excel や Word
+                保存するファイルは、このアプリにもう一度読み込んで、ベンダーの返事の確認や「やった」の印の続きをするためのものです。Excel や Word
                 では開けません。人に見せるときは「説明用の1枚を印刷する」を使ってください。ファイルには病院の弱いところの情報が入るので、院外に持ち出さないでください。病院名と、これまでの質問と回答の文は入りません。次にすることに付けた「やった」の印は入ります。
               </p>
             </div>

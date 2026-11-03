@@ -12,11 +12,18 @@ const STEP_GROUPS = [
 const HANDOVER_STEPS_SHOWN = 1;
 const HANDOVER_QUESTIONS_SHOWN = 2;
 
-// 分類ごとに「分類名：先頭の文（ほか n件）」の形にする
+// 分類ごとに「分類名：先頭の文。ほか n件。」の形にする（残りは上の「次にすること」で「済み」が付いていないもの）
 function remainingLine(group: (typeof STEP_GROUPS)[number], steps: NextStepGroups[keyof NextStepGroups]): string {
   const shown = steps.slice(0, HANDOVER_STEPS_SHOWN).map((step) => step.text);
   const rest = steps.length - shown.length;
-  return `${group.short}：${shown.join("／")}${rest > 0 ? `（ほか${rest}件）` : ""}`;
+  return `${group.short}：${shown.join("／")}${rest > 0 ? `ほか${rest}件。` : ""}`;
+}
+
+// 残っていることの1行目。次にすることが元々ないときと、すべて済みのときを分ける
+function remainingSummary(remainingCount: number, total: number): string {
+  if (total === 0) return "残っていることはありません（今回確かめた範囲では、次にすることは出ていません）。";
+  if (remainingCount === 0) return `残っていることはありません（次にすること ${total}件は、すべて済みです）。`;
+  return `残っていること ${remainingCount}件（次にすること ${total}件のうち、済みでないもの）`;
 }
 
 // 返事待ち：ベンダーへ聞いた要件のうち、返事でまだ決まっていない観点のもの
@@ -38,6 +45,8 @@ export function PrintSheet({ card, done = [], vendor = null }: { card: Card; don
   );
   const remaining = remainingSteps(card.result.nextSteps, done);
   const remainingCount = countSteps(remaining);
+  const totalSteps = countSteps(card.result.nextSteps);
+  const marked = new Set(done);
   const pending = pendingRequirements(card, vendor);
   const pendingShown = pending.slice(0, HANDOVER_QUESTIONS_SHOWN);
 
@@ -81,9 +90,13 @@ export function PrintSheet({ card, done = [], vendor = null }: { card: Card; don
           {STEP_GROUPS.map((group) => (
             <div key={group.key}>
               <p className="font-bold">{group.title}</p>
+              {/* 画面で「やった」の印を付けたものは「済み：」を頭に付ける。紙でもどれが残りかが分かるように */}
               <ul className="list-disc pl-6">
                 {card.result.nextSteps[group.key].map((step) => (
-                  <li key={step.id}>{step.text}</li>
+                  <li key={step.id}>
+                    {marked.has(step.id) ? "済み：" : ""}
+                    {step.text}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -101,38 +114,50 @@ export function PrintSheet({ card, done = [], vendor = null }: { card: Card; don
         ))}
       </ul>
 
-      {/* 担当が代わっても、どこまで進んだかが分かるように。1枚に収めるため、小さく、件数と先頭の文だけにする */}
-      <h2 className="mt-3 text-[12pt] font-bold">引き継ぐこと</h2>
-      <ul className="list-disc pl-6 text-[9pt] leading-[1.5]">
-        <li>
-          {remainingCount === 0
-            ? "残っていることはありません。次にすることは、すべて「やった」の印が付いています。"
-            : `残っていること ${remainingCount}件（「やった」の印がない次にすること）`}
-          {remainingCount > 0 && (
-            <ul className="list-[circle] pl-5">
-              {STEP_GROUPS.filter((group) => remaining[group.key].length > 0).map((group) => (
-                <li key={group.key}>{remainingLine(group, remaining[group.key])}</li>
-              ))}
-            </ul>
-          )}
-        </li>
-        <li>
-          {pending.length === 0
-            ? "返事待ちの質問はありません。"
-            : `返事待ち ${pending.length}件（ベンダーに聞いたうち、返事でまだ決まっていないこと）：${pendingShown.join("／")}${pending.length > pendingShown.length ? `（ほか${pending.length - pendingShown.length}件）` : ""}`}
-        </li>
-      </ul>
+      {/* 担当が代わっても、どこまで進んだかが分かるように。1枚に収めるため、小さく、件数と先頭の文だけにする。
+          穴が4つで次にすることが12件のような長い場合は2枚になるので、この節と「位置づけ」は途中で切れないようにする */}
+      <div className="break-inside-avoid">
+        <h2 className="mt-3 text-[12pt] font-bold">引き継ぐこと</h2>
+        <ul className="list-disc pl-6 text-[9pt] leading-[1.5]">
+          <li>
+            {remainingSummary(remainingCount, totalSteps)}
+            {remainingCount > 0 && (
+              <ul className="list-[circle] pl-5">
+                {STEP_GROUPS.filter((group) => remaining[group.key].length > 0).map((group) => (
+                  <li key={group.key}>{remainingLine(group, remaining[group.key])}</li>
+                ))}
+              </ul>
+            )}
+          </li>
+          <li>
+            {/* 要件の文は「…取っている」のような言い切りなので、「かどうか」を添えて、できている事実と読まれないようにする */}
+            {pending.length === 0
+              ? "返事待ちの質問はありません。"
+              : `返事待ち ${pending.length}件（ベンダーへの質問のうち、返事でまだ分かっていないこと）`}
+            {pending.length > 0 && (
+              <ul className="list-[circle] pl-5">
+                {pendingShown.map((text) => (
+                  <li key={text}>「{text}」かどうか</li>
+                ))}
+                {pending.length > pendingShown.length && <li>ほか{pending.length - pendingShown.length}件</li>}
+              </ul>
+            )}
+          </li>
+        </ul>
+      </div>
 
-      <h2 className="mt-3 text-[12pt] font-bold">この点検の位置づけ</h2>
-      <ul className="list-disc pl-6">
-        <li>事務の担当者の回答とベンダーの返事に基づく自己点検です。実地の確認ではありません。</li>
-        <li>対策が基準を満たしていると保証するものではなく、法的な判断もしていません。</li>
-        <li>{card.itemName}だけを確かめたもので、すべての対策を確かめたものではありません。</li>
-        <li>
-          根拠は厚生労働省の公開資料（チェックリスト、同マニュアル 令和8年度版、医療情報システムの安全管理に関するガイドライン
-          第7.0版）からの引用です。厚生労働省が作成したものではありません。
-        </li>
-      </ul>
+      <div className="break-inside-avoid">
+        <h2 className="mt-3 text-[12pt] font-bold">この点検の位置づけ</h2>
+        <ul className="list-disc pl-6">
+          <li>事務の担当者の回答とベンダーの返事に基づく自己点検です。実地の確認ではありません。</li>
+          <li>対策が基準を満たしていると保証するものではなく、法的な判断もしていません。</li>
+          <li>{card.itemName}だけを確かめたもので、すべての対策を確かめたものではありません。</li>
+          <li>
+            根拠は厚生労働省の公開資料（チェックリスト、同マニュアル 令和8年度版、医療情報システムの安全管理に関するガイドライン
+            第7.0版）からの引用です。厚生労働省が作成したものではありません。
+          </li>
+        </ul>
+      </div>
     </section>
   );
 }

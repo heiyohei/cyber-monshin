@@ -31,7 +31,7 @@ test("引き継ぎ：「やった」印が保存ファイル（版2）に入り�
   await expect(isolateFree).toBeChecked();
   await expect(restoreVendor).toBeChecked();
   // 印を変えたので、保存し直しの案内とボタンが出る
-  await expect(holes.getByText(/「やった」の印を残すには、もう一度ファイルを保存してください/)).toBeVisible();
+  await expect(holes.getByText(/「やった」の印を残すには、ファイルを保存してください/)).toBeVisible();
   const saveButton = holes.getByRole("button", { name: "続きを再開するためのファイルを保存する（「やった」の印を反映した状態）" });
   await expect(saveButton).toBeVisible();
   await saveScreenshot(page, "item5-done", holes);
@@ -48,8 +48,9 @@ test("引き継ぎ：「やった」印が保存ファイル（版2）に入り�
   expect(saved.items[0].done).toEqual(["backup.restore.vendor", "backup.isolate.free"]);
   // 保存ファイルに、質問と回答の文や病院名は入らない（今までどおり）
   expect(JSON.stringify(saved)).not.toContain("history");
-  // 保存したあとは、保存し直しの案内が消える
+  // 保存したあとは、保存し直しの案内が消え、押したボタンも消えるので、焦点は「次にすること」の見出しへ戻る
   await expect(holes.getByText(/「やった」の印を残すには/)).toHaveCount(0);
+  await expect(holes.getByRole("heading", { name: "次にすること" })).toBeFocused();
 
   // 保存したファイル（版2）を読み込み直すと、印と残っていることが戻る
   await page.goto("/");
@@ -67,16 +68,20 @@ test("引き継ぎ：「やった」印が保存ファイル（版2）に入り�
   await page.emulateMedia({ media: "print" });
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole("heading", { name: "引き継ぐこと" })).toBeVisible();
-  await expect(sheet).toContainText("残っていること 4件");
+  // 「次にすること」の一覧では、印を付けたものに「済み：」が付く（紙でもどれが残りか分かる）
+  await expect(sheet).toContainText("済み：バックアップを保存している機器がどこにあり、ふだんつながったままかを、院内で確かめます。");
+  await expect(sheet).toContainText("済み：バックアップから戻してみたことがあるか、次はいつ試せるかを聞きます。");
+  await expect(sheet.getByText(/^済み：/)).toHaveCount(2);
+  await expect(sheet).toContainText("残っていること 4件（次にすること 6件のうち、済みでないもの）");
   await expect(sheet).toContainText("今日から院内でできること：最後にバックアップから戻してみた日を、作業報告や記録で探します。");
   await expect(sheet).toContainText("ベンダーに聞くこと：バックアップを、攻撃が届かない場所に分けて保管しているかを聞きます。");
   await expect(sheet).toContainText(
-    "予算を立てて検討すること：ネットワークから切り離してバックアップを保管する仕組みを、次にシステムを入れ替えるときに考えます。（ほか1件）",
+    "予算を立てて検討すること：ネットワークから切り離してバックアップを保管する仕組みを、次にシステムを入れ替えるときに考えます。ほか1件。",
   );
-  // 架空のファイルの要件2つは、どちらも返事でまだ決まっていない（sources がすべて answer）
-  await expect(sheet).toContainText(
-    "返事待ち 2件（ベンダーに聞いたうち、返事でまだ決まっていないこと）：バックアップから実際にデータを戻す試験をしたことがある／バックアップの控えを、院内のネットワークから切り離した場所に保管している",
-  );
+  // 架空のファイルの要件2つは、どちらも返事でまだ決まっていない（sources がすべて answer）。文は「…かどうか」の形
+  await expect(sheet).toContainText("返事待ち 2件（ベンダーへの質問のうち、返事でまだ分かっていないこと）");
+  await expect(sheet).toContainText("「バックアップから実際にデータを戻す試験をしたことがある」かどうか");
+  await expect(sheet).toContainText("「バックアップの控えを、院内のネットワークから切り離した場所に保管している」かどうか");
   // 「引き継ぐこと」は「この点検の位置づけ」の前（下のほう）にある
   const headings = await sheet.getByRole("heading").allTextContents();
   expect(headings.indexOf("引き継ぐこと")).toBe(headings.indexOf("この点検の位置づけ") - 1);
@@ -118,7 +123,65 @@ test("引き継ぎ：穴がなければ、1枚に「残っていることはあ�
 
   const sheet = page.locator("#print-sheet");
   await page.emulateMedia({ media: "print" });
-  await expect(sheet).toContainText("残っていることはありません。");
+  // 次にすることが元々ないので、「すべて済み」とは書かない
+  await expect(sheet).toContainText("残っていることはありません（今回確かめた範囲では、次にすることは出ていません）。");
+  await expect(sheet).not.toContainText("すべて済み");
   await expect(sheet).toContainText("返事待ちの質問はありません。");
+  await page.emulateMedia({ media: "screen" });
+});
+
+// いちばん長くなる場合：チェック項目が5つの「アカウントと権限」で、4つの観点がすべて「わからない」（穴4件、次にすること12件、根拠3件）、
+// ベンダーへの質問3つに要件が4つずつ（返事待ち12件）。この場合は「引き継ぐこと」を足す前から1枚を超える（根拠までで1枚がいっぱい）ので、
+// 2枚以内で、「引き継ぐこと」が件数と先頭の文にまとまっていることを確かめる。高さは実測を DEVLOG に書くために出す
+test("引き継ぎ：いちばん長くなる場合（アカウントと権限、穴4件、返事待ち12件）でも、「引き継ぐこと」は短くまとまり、2枚以内", async ({ page }) => {
+  const viewpointIds = ["admin", "reuse", "cleanup", "two_factor"];
+  const fixture = JSON.parse(readFileSync(path.join(__dirname, "fixtures", "saved-result-v1.json"), "utf8"));
+  fixture.items[0].itemId = "accounts";
+  fixture.items[0].vendorAnswer = "unknown";
+  fixture.items[0].states = Object.fromEntries(viewpointIds.map((id) => [id, "unknown"]));
+  fixture.items[0].sources = Object.fromEntries(viewpointIds.map((id) => [id, "answer"]));
+  fixture.items[0].reasons = Object.fromEntries(viewpointIds.map((id) => [id, "分からないとの回答でした。"]));
+  fixture.items[0].summary = "権限、使い回し、不要なアカウント、本人の確かめ方のいずれも、分からないとの回答でした。";
+  fixture.items[0].vendorQuestions = [1, 2, 3].map((q) => ({
+    gapType: "outside",
+    concern: "だれが強い権限を持ち、どのアカウントが残っているかが分からない。",
+    question: `アカウントと権限について、次の点を、はい／いいえで教えてください（${q}）。`,
+    requirements: viewpointIds.map((viewpointId, index) => ({
+      id: `q${q}_r${index + 1}`,
+      viewpointId,
+      text: `（${q}-${index + 1}）設定を変えられる強い権限を持つアカウントの一覧があり、必要な人だけに絞られている`,
+      followUp: "次の点を教えてください：強い権限を持つアカウントの一覧",
+    })),
+  }));
+  mkdirSync(RESULTS_DIR, { recursive: true });
+  const longestPath = path.join(RESULTS_DIR, "handover-longest-v1.json");
+  writeFileSync(longestPath, JSON.stringify(fixture, null, 2));
+
+  await page.goto("/");
+  await page.getByLabel("続きを再開するためのファイルを読み込む").setInputFiles(longestPath);
+  await expect(page.getByRole("heading", { name: "問診のまとめ" })).toBeVisible();
+  const holes = page.getByRole("region", { name: HOLES_REGION });
+  await expect(holes.getByText("残っていること 12件（全部で12件）")).toBeVisible();
+
+  const sheet = page.locator("#print-sheet");
+  await page.emulateMedia({ media: "print" });
+  await expect(sheet).toContainText("残っていること 12件（次にすること 12件のうち、済みでないもの）");
+  await expect(sheet).toContainText("返事待ち 12件");
+  await expect(sheet).toContainText("ほか10件");
+  await page.setViewportSize({ width: PRINTABLE_WIDTH_PX, height: 900 });
+  const height = await sheet.evaluate((element) => element.getBoundingClientRect().height);
+  // 「引き継ぐこと」の節（見出しと一覧を包む div）の高さ。これを引いた分が、足す前の高さ
+  const handoverHeight = await sheet
+    .getByRole("heading", { name: "引き継ぐこと" })
+    .evaluate((heading) => heading.parentElement!.getBoundingClientRect().height);
+  const pdf = await page.pdf({ format: "A4", preferCSSPageSize: true });
+  writeFileSync(path.join(RESULTS_DIR, "handover-longest-print.pdf"), pdf);
+  const pageCount = (pdf.toString("latin1").match(/\/Type\s*\/Page\b(?!s)/g) ?? []).length;
+  console.log(
+    `[handover] いちばん長い1枚：幅 ${PRINTABLE_WIDTH_PX}px で高さ ${Math.round(height)}px（うち「引き継ぐこと」${Math.round(handoverHeight)}px、上限 ${Math.round(PRINTABLE_HEIGHT_PX)}px）、PDF ${pageCount}ページ`,
+  );
+  expect(handoverHeight).toBeLessThan(200);
+  expect(pageCount, `1枚の高さ ${Math.round(height)}px`).toBeLessThanOrEqual(2);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ media: "screen" });
 });
