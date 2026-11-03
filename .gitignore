@@ -161,3 +161,4 @@ next-env.d.ts
 # 手元だけに置く作業用のファイル
 docs/plan.md
 .claude/launch.json
+docs/demo-script.md
