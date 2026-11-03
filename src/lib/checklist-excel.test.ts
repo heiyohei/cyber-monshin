@@ -71,3 +71,15 @@ test("Excel：チェック項目が複数なら、1つでもいいえならい�
   assert.deepEqual(readItemAnswer(twoItems, rows("はい", "はい")), { status: "read", answer: "yes" });
   assert.deepEqual(readItemAnswer(twoItems, rows("はい", null)), { status: "ambiguous", answer: "unknown" });
 });
+
+test("Excel：シート名が同じでも、表の上の「事業者確認用」の表示で事業者用を見分ける", () => {
+  const name = "医療機関におけるサイバーセキュリティ対策チェックリスト";
+  const sheets: SheetRows[] = [
+    { sheet: name, data: [["令和8年度版 医療機関・薬局におけるサイバーセキュリティ対策チェックリスト", "医療機関・薬局 確認用"], ["2", PATCH, "いいえ"]] },
+    { sheet: name, data: [["令和8年度 医療機関・薬局におけるサイバーセキュリティ対策チェックリスト", "事業者確認用"], ["2", PATCH, "対象外"]] },
+  ];
+  assert.deepEqual(readItemAnswer(UPDATE_ITEM, sheets), { status: "read", answer: "no" });
+  assert.deepEqual(readVendorAnswer(UPDATE_ITEM, sheets), { status: "read", answer: "not_applicable" });
+  // 事業者用だけを読み込んでも、ベンダーの回答を去年の回答と取り違えない
+  assert.deepEqual(readItemAnswer(UPDATE_ITEM, sheets.slice(1)), { status: "not_found", answer: "unknown" });
+});

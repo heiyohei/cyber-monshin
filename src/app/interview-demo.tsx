@@ -238,17 +238,18 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
 
   // Excel はこの画面の中だけで読み、サーバーへは送らない
   async function readExcel(event: ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0];
+    const selected = [...(event.target.files ?? [])];
     event.target.value = "";
-    if (!selected) return;
+    if (selected.length === 0) return;
     setError("");
-    if (selected.size > 5_000_000) {
-      setError("ファイルが大きすぎます。チェックリストの Excel を選んでください。");
+    if (selected.length > 2 || selected.some((file) => file.size > 5_000_000)) {
+      setError("チェックリストの Excel を2つまで選んでください。1つ5MBまでです。");
       return;
     }
     try {
       const { default: readExcelFile } = await import("read-excel-file/browser");
-      const sheets = await readExcelFile(selected);
+      // 医療機関用と事業者用の2つを一緒に選べる
+      const sheets = (await Promise.all(selected.map((file) => readExcelFile(file)))).flat();
       const reading = readItemAnswer(item, sheets);
       setExcel(reading);
       setExcelAnswer(reading.answer);
@@ -516,14 +517,15 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             </button>
             <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
               <p className="text-std-16N-170">
-                去年のチェックリスト（Excel）から始めることもできます。Excel はこの画面の中で読み、送るのは
-                {checkItemNumbers(item)} の回答だけです。
+                去年のチェックリスト（Excel）から始めることもできます。医療機関用と事業者用の2つを一緒に選ぶと、ベンダーの回答も読み取ります。Excel
+                はこの画面の中で読み、送るのは {checkItemNumbers(item)} の回答だけです。
               </p>
               <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
                 Excel を読み込む
                 <input
                   type="file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  multiple
                   onChange={readExcel}
                   className="sr-only"
                 />

@@ -163,3 +163,6 @@ docs/plan.md
 .claude/launch.json
 docs/demo-script.md
 eval/runs/
+
+# 手元で試すための架空の記入例（厚生労働省の様式に架空の回答を入れたもの）
+samples/

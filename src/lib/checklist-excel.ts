@@ -14,8 +14,10 @@ function text(cell: Cell): string {
   return typeof cell === "string" ? cell.normalize("NFKC").replace(/\s/g, "") : "";
 }
 
-function isVendorSheet(sheet: string): boolean {
-  return sheet.normalize("NFKC").includes("事業者");
+// 厚生労働省の様式は、医療機関用も事業者用もシート名が同じ。表の上にある「事業者確認用」の表示でも見分ける
+function isVendorSheet({ sheet, data }: SheetRows): boolean {
+  if (sheet.normalize("NFKC").includes("事業者")) return true;
+  return data.slice(0, 6).some((row) => row.map(text).join("").includes("事業者確認用"));
 }
 
 // 1つのチェック項目の回答を探す。文面が版で少し違うので、言葉で行を探す
@@ -39,7 +41,7 @@ function readCheckItem(rows: readonly (readonly Cell[])[], checkItem: CheckItem)
 // チェック項目が複数あれば、1つでも「いいえ」なら「いいえ」、すべて「はい」のときだけ「はい」。
 // 読み取れない、または答えが1つに決まらないときは「要確認」にして、画面で選び直してもらう
 export function readItemAnswer(item: FocusItem, sheets: SheetRows[]): ExcelReading {
-  const rows = sheets.filter(({ sheet }) => !isVendorSheet(sheet)).flatMap(({ data }) => data);
+  const rows = sheets.filter((sheet) => !isVendorSheet(sheet)).flatMap(({ data }) => data);
   const readings = item.checkItems.map((checkItem) => readCheckItem(rows, checkItem));
 
   if (readings.some((reading) => reading.answer === "no")) return { status: "read", answer: "no" };
@@ -53,7 +55,7 @@ export function readItemAnswer(item: FocusItem, sheets: SheetRows[]): ExcelReadi
 // 事業者用のシートがあれば、対応する項目の回答（はい／いいえ／対象外）を読む
 export function readVendorAnswer(item: FocusItem, sheets: SheetRows[]): ExcelReading<VendorAnswer> | null {
   if (!item.vendorCheckItem) return null;
-  const rows = sheets.filter(({ sheet }) => isVendorSheet(sheet)).flatMap(({ data }) => data);
+  const rows = sheets.filter((sheet) => isVendorSheet(sheet)).flatMap(({ data }) => data);
   if (rows.length === 0) return null;
   return readCheckItem(rows, item.vendorCheckItem);
 }
