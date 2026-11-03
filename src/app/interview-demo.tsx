@@ -48,6 +48,7 @@ const STEP_GROUPS = [
 
 type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[] };
 type TermExchange = { question: string; answer: string };
+type RecentReading = { viewpointId: string; status: keyof typeof STATUS_LABELS; reason: string };
 
 function WarningBox({
   warning,
@@ -133,6 +134,9 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [error, setError] = useState("");
   const [canContinue, setCanContinue] = useState(false);
   const [warning, setWarning] = useState<PersonalInfoWarning | null>(null);
+  // 直前の回答から読み取った観点。左に一覧を出し、右のカードの同じ行を強調して、つながりを見せる
+  const [recent, setRecent] = useState<RecentReading[]>([]);
+  const [verdictChange, setVerdictChange] = useState<string | null>(null);
   const [termInput, setTermInput] = useState("");
   const [terms, setTerms] = useState<TermExchange[]>([]);
   const [termRemaining, setTermRemaining] = useState<number | null>(null);
@@ -155,10 +159,17 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     }
     if (event.type === "error") setError(event.message);
     if (event.type === "session") setSession(event.session);
-    if (event.type === "verdict_updated") setCard(event.card);
+    if (event.type === "verdict_updated") {
+      setCard(event.card);
+      setVerdictChange(event.card.label);
+    }
     if (event.type === "viewpoint_updated") {
       setCard(event.card);
       setReasons((current) => ({ ...current, [event.viewpointId]: event.reason }));
+      setRecent((current) => [
+        ...current.filter((item) => item.viewpointId !== event.viewpointId),
+        { viewpointId: event.viewpointId, status: event.status, reason: event.reason },
+      ]);
     }
   }
 
@@ -170,9 +181,11 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
 
   // 署名つきの状態が届いたときだけ成功とする。失敗したら画面を送信前に戻し、やり直せるようにする
   async function sendInterview(body: object) {
-    const before = { question, card, reasons };
+    const before = { question, card, reasons, recent, verdictChange };
     let received = false;
     let failed = false;
+    setRecent([]);
+    setVerdictChange(null);
     setBusy(true);
     setError("");
     setQuestion(null);
@@ -215,6 +228,8 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
         setQuestion(before.question);
         setCard(before.card);
         setReasons(before.reasons);
+        setRecent(before.recent);
+        setVerdictChange(before.verdictChange);
       }
       setBusy(false);
     }
@@ -599,6 +614,31 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
           </button>
         )}
 
+        {session && !finished && (recent.length > 0 || verdictChange) && !busy && (
+          <section
+            aria-label="直前の回答から読み取ったこと"
+            className="flex flex-col gap-2 rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4"
+          >
+            <h2 className="text-std-16B-170 text-blue-900">直前の回答から読み取ったこと（右の判定カードに反映）</h2>
+            <ul className="flex flex-col gap-1 text-std-16N-170">
+              {recent.map((item) => (
+                <li key={item.viewpointId}>
+                  <span className="text-std-16B-170">
+                    {card.viewpoints.find((viewpoint) => viewpoint.id === item.viewpointId)?.name}：
+                    {STATUS_LABELS[item.status]}
+                  </span>
+                  　{item.reason}
+                </li>
+              ))}
+            </ul>
+            {verdictChange && <p className="text-std-16B-170">判定が「{verdictChange}」に変わりました。</p>}
+          </section>
+        )}
+
+        {question && !busy && (
+          <h2 className="text-std-20B-150 text-solid-gray-900">質問に答える</h2>
+        )}
+
         {question && !busy && (
           <form onSubmit={submitAnswer} className="flex flex-col gap-3">
             <p className="text-std-20B-150 text-solid-gray-900">{question.text}</p>
@@ -827,6 +867,9 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
       </section>
 
       <aside className={`flex flex-col gap-4 self-start ${panelClass}`} aria-label="判定">
+        <p className="rounded-8 bg-solid-gray-50 px-3 py-2 text-std-16B-170 text-solid-gray-800">
+          判定カード：左の回答から読み取った内容で、自動で更新されます
+        </p>
         <div aria-live="polite">
           <p className="text-std-16N-170 text-solid-gray-800">
             {card.itemName}（{checkItemNumbers(card)}）
@@ -841,7 +884,17 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
         </div>
         <ul className="flex flex-col gap-3">
           {card.viewpoints.map((viewpoint) => (
-            <li key={viewpoint.id} className="border-t border-solid-gray-200 pt-3 text-std-16N-170">
+            <li
+              key={viewpoint.id}
+              className={`border-t border-solid-gray-200 pt-3 text-std-16N-170 ${
+                recent.some((item) => item.viewpointId === viewpoint.id)
+                  ? "-mx-3 rounded-8 border-l-4 border-l-blue-900 bg-blue-50 px-3 pb-3"
+                  : ""
+              }`}
+            >
+              {recent.some((item) => item.viewpointId === viewpoint.id) && (
+                <p className="text-std-16B-170 text-blue-900">いまの回答で更新</p>
+              )}
               <p className="text-std-16B-170">
                 {viewpoint.name}：{STATUS_LABELS[viewpoint.status]}
               </p>
