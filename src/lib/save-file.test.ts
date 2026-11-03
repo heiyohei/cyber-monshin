@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { BACKUP_ITEM } from "../data/backup.ts";
 import { buildSaveFile, sessionFromSaveFile } from "./save-file.ts";
 import { createSession, vendorRequestFor } from "./session.ts";
 
 function finishedSession() {
-  const session = createSession("yes", "no_item");
+  const session = createSession(BACKUP_ITEM, "yes", "no_item");
   session.states = { acquire: "confirmed", restore: "unknown", isolate: "denied", procedure: "confirmed" };
   session.vendorQuestions = [
     {

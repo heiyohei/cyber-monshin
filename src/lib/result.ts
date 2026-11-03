@@ -1,7 +1,7 @@
-import { BACKUP_ITEM, BACKUP_RESULTS } from "../data/backup.ts";
-import { VIEWPOINT_IDS, type ViewpointId, type ViewpointStates, type ViewpointStatus } from "./verdict.ts";
+import type { FocusItem } from "../data/types.ts";
+import type { ViewpointStates, ViewpointStatus } from "./verdict.ts";
 
-export type Hole = { viewpointId: ViewpointId; name: string; status: ViewpointStatus; text: string };
+export type Hole = { viewpointId: string; name: string; status: ViewpointStatus; text: string };
 
 export type Result = {
   holes: Hole[];
@@ -13,23 +13,23 @@ const TOP = 3;
 
 // 穴は「できていない」か「わからない」の観点。まだ確かめていない観点は数えない。
 // 順位と次の一手は固定データから選ぶ
-export function computeResult(states: ViewpointStates): Result {
-  const holes = VIEWPOINT_IDS.filter((id) => states[id] === "denied" || states[id] === "unknown")
-    .sort((a, b) => BACKUP_RESULTS[a].impactRank - BACKUP_RESULTS[b].impactRank)
-    .map((id) => ({
-      viewpointId: id,
-      name: BACKUP_ITEM.viewpoints.find((viewpoint) => viewpoint.id === id)!.name,
-      status: states[id],
-      text: BACKUP_RESULTS[id].hole,
-    }));
+export function computeResult(item: FocusItem, states: ViewpointStates): Result {
+  const holes = item.viewpoints
+    .filter((viewpoint) => states[viewpoint.id] === "denied" || states[viewpoint.id] === "unknown")
+    .sort((a, b) => a.impactRank - b.impactRank);
 
   return {
-    holes: holes.slice(0, TOP),
+    holes: holes.slice(0, TOP).map((viewpoint) => ({
+      viewpointId: viewpoint.id,
+      name: viewpoint.name,
+      status: states[viewpoint.id],
+      text: viewpoint.hole,
+    })),
     holeCount: holes.length,
     nextSteps: {
-      free: holes.map((hole) => BACKUP_RESULTS[hole.viewpointId].nextSteps.free),
-      vendor: holes.map((hole) => BACKUP_RESULTS[hole.viewpointId].nextSteps.vendor),
-      budget: holes.map((hole) => BACKUP_RESULTS[hole.viewpointId].nextSteps.budget),
+      free: holes.map((viewpoint) => viewpoint.nextSteps.free),
+      vendor: holes.map((viewpoint) => viewpoint.nextSteps.vendor),
+      budget: holes.map((viewpoint) => viewpoint.nextSteps.budget),
     },
   };
 }

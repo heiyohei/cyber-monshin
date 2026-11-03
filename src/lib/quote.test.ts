@@ -8,6 +8,7 @@ import {
   type ReadResult,
   type Requirement,
 } from "./quote.ts";
+import { BACKUP_ITEM } from "../data/backup.ts";
 import { initialStates } from "./verdict.ts";
 
 const REPLY = "バックアップは毎日、夜間に取得しています。\n復元の試験は未実施です。ＮＡＳに保存しています。";
@@ -36,7 +37,7 @@ test("検証：偽の引用は「回答なし」に直り、観点の状態を�
   assert.equal(checked[0].result, "no_answer");
   assert.equal(checked[0].quote, "");
   assert.equal(checked[0].follow_up, "取得の頻度を教えてください。");
-  assert.deepEqual(applyResults(initialStates(), REQUIREMENTS, checked), initialStates());
+  assert.deepEqual(applyResults(initialStates(BACKUP_ITEM), REQUIREMENTS, checked), initialStates(BACKUP_ITEM));
 });
 
 test("検証：読み取りが返らなかった要件は「回答なし」になる", () => {
@@ -50,7 +51,7 @@ test("検証：同じ観点の要件が複数あれば、甘くならない側�
     { id: "b", viewpointId: "restore", text: "1年以内に戻した", followUp: "" },
   ];
   const states = (first: ReadResult["result"], second: ReadResult["result"]) =>
-    applyResults(initialStates(), twice, [read("a", first, ""), read("b", second, "")]).restore;
+    applyResults(initialStates(BACKUP_ITEM), twice, [read("a", first, ""), read("b", second, "")]).restore;
 
   assert.equal(states("not_met", "met"), "denied");
   assert.equal(states("met", "not_met"), "denied");
@@ -70,11 +71,11 @@ test("検証：満たされない要件には、追加の質問が必ず付く",
 test("検証：満たす、満たさない、曖昧を対応づけて状態を更新する", () => {
   const met = read("r_acquire", "met", "毎日、夜間に取得");
   const notMet = read("r_restore", "not_met", "復元の試験は未実施");
-  const states = applyResults(initialStates(), REQUIREMENTS, checkResults(REQUIREMENTS, [met, notMet], REPLY));
+  const states = applyResults(initialStates(BACKUP_ITEM), REQUIREMENTS, checkResults(REQUIREMENTS, [met, notMet], REPLY));
   assert.equal(states.acquire, "confirmed");
   assert.equal(states.restore, "denied");
 
   const ambiguous = read("r_restore", "ambiguous", "復元の試験は未実施");
-  const unchanged = applyResults(initialStates(), REQUIREMENTS, checkResults(REQUIREMENTS, [ambiguous], REPLY));
+  const unchanged = applyResults(initialStates(BACKUP_ITEM), REQUIREMENTS, checkResults(REQUIREMENTS, [ambiguous], REPLY));
   assert.equal(unchanged.restore, "not_asked");
 });

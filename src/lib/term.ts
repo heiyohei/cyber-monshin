@@ -1,6 +1,5 @@
-import { BACKUP_ITEM } from "../data/backup.ts";
 import { client, type Usage } from "./claude.ts";
-import type { InterviewSession } from "./session.ts";
+import { itemOf, type InterviewSession } from "./session.ts";
 
 // ことばの相談。判定には使わず、問診の履歴とも分ける
 export const TERM_MODEL = "claude-haiku-5-5";
@@ -25,7 +24,7 @@ export class TermStop extends Error {}
 // 今の質問は、ブラウザから受け取らず、署名された履歴から取り出す
 export function currentQuestion(session: InterviewSession): string {
   if (!session.pendingQuestionId) return "";
-  if (session.questionCount === 1) return BACKUP_ITEM.firstQuestion.text;
+  if (session.questionCount === 1) return itemOf(session).firstQuestion.text;
   for (const message of session.messages) {
     if (message.role !== "assistant" || typeof message.content === "string") continue;
     for (const block of message.content) {

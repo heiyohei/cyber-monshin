@@ -1,9 +1,6 @@
 // 判定はここだけで計算する。Claude の出力をそのまま判定にしない。
-export const VIEWPOINT_IDS = ["acquire", "restore", "isolate", "procedure"] as const;
-export type ViewpointId = (typeof VIEWPOINT_IDS)[number];
-
 export type ViewpointStatus = "not_asked" | "confirmed" | "denied" | "unknown";
-export type ViewpointStates = Record<ViewpointId, ViewpointStatus>;
+export type ViewpointStates = Record<string, ViewpointStatus>;
 
 export type Verdict = "no" | "unknown" | "paper_only" | "confirmed_by_answer" | "reviewing";
 
@@ -15,16 +12,20 @@ export const VERDICT_LABELS: Record<Verdict, string> = {
   reviewing: "確認中",
 };
 
-export function initialStates(): ViewpointStates {
-  return { acquire: "not_asked", restore: "not_asked", isolate: "not_asked", procedure: "not_asked" };
+type VerdictRule = { primaryViewpoints: readonly string[]; viewpoints: readonly { id: string }[] };
+
+export function initialStates(item: { viewpoints: readonly { id: string }[] }): ViewpointStates {
+  return Object.fromEntries(item.viewpoints.map((viewpoint) => [viewpoint.id, "not_asked"]));
 }
 
-export function computeBackupVerdict(states: ViewpointStates): Verdict {
-  if (states.acquire === "denied") return "no";
-  if (states.acquire === "unknown") return "unknown";
+// どの項目も同じ基準を使う。最も重い観点（primaryViewpoints）が否定なら「いいえ」、不明なら「要確認」
+export function computeVerdict(item: VerdictRule, states: ViewpointStates): Verdict {
+  const primary = item.primaryViewpoints.map((id) => states[id]);
+  if (primary.includes("denied")) return "no";
+  if (primary.includes("unknown")) return "unknown";
 
-  const others = [states.restore, states.isolate, states.procedure];
-  if (others.some((status) => status === "denied" || status === "unknown")) return "paper_only";
-  if (VIEWPOINT_IDS.every((id) => states[id] === "confirmed")) return "confirmed_by_answer";
+  const others = item.viewpoints.filter((viewpoint) => !item.primaryViewpoints.includes(viewpoint.id));
+  if (others.some(({ id }) => states[id] === "denied" || states[id] === "unknown")) return "paper_only";
+  if (item.viewpoints.every(({ id }) => states[id] === "confirmed")) return "confirmed_by_answer";
   return "reviewing";
 }

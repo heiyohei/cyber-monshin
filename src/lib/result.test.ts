@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { BACKUP_ITEM } from "../data/backup.ts";
 import { computeResult } from "./result.ts";
 import { initialStates, type ViewpointStates } from "./verdict.ts";
 
 test("結果：まだ確かめていない観点と確認済みの観点は穴に数えない", () => {
-  const states: ViewpointStates = { ...initialStates(), acquire: "confirmed" };
-  const result = computeResult(states);
+  const states: ViewpointStates = { ...initialStates(BACKUP_ITEM), acquire: "confirmed" };
+  const result = computeResult(BACKUP_ITEM, states);
   assert.equal(result.holeCount, 0);
   assert.deepEqual(result.nextSteps, { free: [], vendor: [], budget: [] });
 });
@@ -17,7 +18,7 @@ test("結果：穴は影響の順位で並び、上位3件だけを示す", () =
     isolate: "denied",
     procedure: "unknown",
   };
-  const result = computeResult(states);
+  const result = computeResult(BACKUP_ITEM, states);
   assert.deepEqual(
     result.holes.map((hole) => hole.viewpointId),
     ["acquire", "isolate", "restore"],
@@ -33,7 +34,7 @@ test("結果：穴が3件未満なら見つかった件数だけ示し、次の�
     isolate: "confirmed",
     procedure: "confirmed",
   };
-  const result = computeResult(states);
+  const result = computeResult(BACKUP_ITEM, states);
   assert.equal(result.holes.length, 1);
   assert.equal(result.holes[0].name, "戻す確認");
   assert.equal(result.nextSteps.free.length, 1);
@@ -43,5 +44,5 @@ test("結果：穴が3件未満なら見つかった件数だけ示し、次の�
 
 test("結果：同じ状態なら必ず同じ結果になる", () => {
   const states: ViewpointStates = { acquire: "confirmed", restore: "denied", isolate: "unknown", procedure: "denied" };
-  assert.deepEqual(computeResult(states), computeResult({ ...states }));
+  assert.deepEqual(computeResult(BACKUP_ITEM, states), computeResult(BACKUP_ITEM, { ...states }));
 });

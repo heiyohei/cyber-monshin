@@ -1,4 +1,4 @@
-import type { ViewpointId, ViewpointStates } from "./verdict.ts";
+import type { ViewpointStates } from "./verdict.ts";
 
 export type RequirementResult = "met" | "not_met" | "ambiguous" | "no_answer";
 
@@ -10,7 +10,7 @@ export type ReadResult = {
   follow_up: string;
 };
 
-export type Requirement = { id: string; viewpointId: ViewpointId; text: string; followUp: string };
+export type Requirement = { id: string; viewpointId: string; text: string; followUp: string };
 
 function normalize(text: string): string {
   return text.normalize("NFKC").replace(/\s/g, "");
@@ -45,7 +45,7 @@ export function checkResults(
 // 1つの観点に要件が複数あるときは、甘くならない側にまとめる。
 // 1つでも満たさなければ「満たさない」、すべて満たすときだけ「満たす」
 export function viewpointResult(
-  viewpointId: ViewpointId,
+  viewpointId: string,
   requirements: Requirement[],
   results: ReadResult[],
 ): RequirementResult | null {

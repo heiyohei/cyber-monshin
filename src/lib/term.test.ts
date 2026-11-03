@@ -6,7 +6,7 @@ import { createSession } from "./session.ts";
 import { currentQuestion } from "./term.ts";
 
 test("ことばの相談：今の質問は署名された履歴から取り出す", () => {
-  const session = createSession("yes", "no_item");
+  const session = createSession(BACKUP_ITEM, "yes", "no_item");
   assert.equal(currentQuestion(session), "");
 
   session.pendingQuestionId = "q1";

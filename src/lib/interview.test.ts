@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { BACKUP_ITEM } from "../data/backup.ts";
 import type Anthropic from "@anthropic-ai/sdk";
 import { giveUp, processToolUses, type InterviewEvent } from "./interview.ts";
 import { buildSaveFile, sessionFromSaveFile } from "./save-file.ts";
@@ -28,7 +29,7 @@ function vendor(gap_type: string, viewpoint_id = "restore") {
 }
 
 function setup() {
-  const session = createSession("yes", "no_item");
+  const session = createSession(BACKUP_ITEM, "yes", "no_item");
   const events: InterviewEvent[] = [];
   return { session, events, emit: (event: InterviewEvent) => events.push(event) };
 }
@@ -156,11 +157,17 @@ test("終了：未確認の観点があれば拒否し、質問の上限に達�
   assert.equal(session.finished, true);
 });
 
-test("終了：確認事項がなく穴があれば、固定の確認事項で補う", () => {
+test("終了：確認事項がなく穴があれば、穴の観点の固定データから確認事項を作る", () => {
   const { session } = setup();
   assert.equal(vendorRequestFor(session), null);
   session.states.restore = "denied";
-  assert.equal(vendorRequestFor(session)?.requirements.length, 4);
+  session.states.isolate = "unknown";
+  const request = vendorRequestFor(session);
+  assert.deepEqual(
+    request?.requirements.map((item) => item.viewpointId),
+    ["restore", "isolate"],
+  );
+  assert.equal(request?.question.includes("控えから実際に戻せることを確かめたことがある"), true);
 });
 
 test("検証エラーが続いたら、その観点を「わからない」にして止める", () => {
