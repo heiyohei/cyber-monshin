@@ -1,9 +1,9 @@
 import type { Card } from "@/lib/card";
 
 const STEP_GROUPS = [
-  { key: "free", title: "今日、費用なしでできること" },
+  { key: "free", title: "今日、お金をかけずにできること" },
   { key: "vendor", title: "ベンダーに聞くこと" },
-  { key: "budget", title: "予算が必要なこと" },
+  { key: "budget", title: "お金がかかること（次にシステムを入れ替えるときに考える）" },
 ] as const;
 
 // 院長や理事会への説明用の1枚。印刷のときだけ表示する。病院名は手で書き足す
@@ -26,7 +26,7 @@ export function PrintSheet({ card }: { card: Card }) {
         </p>
       ))}
 
-      <h2 className="mt-4 text-[12pt] font-bold">病院が止まる穴</h2>
+      <h2 className="mt-4 text-[12pt] font-bold">このままだと診療が止まるおそれがあるところ</h2>
       {card.result.holeCount === 0 ? (
         <p>今回確認した観点では穴は見つかりませんでした。対策の準拠を保証するものではありません。</p>
       ) : (
@@ -41,7 +41,7 @@ export function PrintSheet({ card }: { card: Card }) {
 
       {card.result.holeCount > 0 && (
         <>
-          <h2 className="mt-4 text-[12pt] font-bold">次の一手</h2>
+          <h2 className="mt-4 text-[12pt] font-bold">次にすること</h2>
           {STEP_GROUPS.map((group) => (
             <div key={group.key}>
               <p className="font-bold">{group.title}</p>
@@ -52,7 +52,7 @@ export function PrintSheet({ card }: { card: Card }) {
               </ul>
             </div>
           ))}
-          <p>費用の金額は示していません。金額や必要性は、ベンダーへの確認で決めます。</p>
+          <p>金額はここでは示していません。いくらかかるか、本当に必要かは、ベンダーに聞いてから決めます。</p>
         </>
       )}
 

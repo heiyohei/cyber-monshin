@@ -41,9 +41,9 @@ const secondaryClass =
   "min-h-11 w-fit rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring has-[:focus-visible]:focus-ring";
 
 const STEP_GROUPS = [
-  { key: "free", title: "今日、費用なしでできること" },
+  { key: "free", title: "今日、お金をかけずにできること" },
   { key: "vendor", title: "ベンダーに聞くこと" },
-  { key: "budget", title: "予算が必要なこと（次のシステム更改などで検討）" },
+  { key: "budget", title: "お金がかかること（次にシステムを入れ替えるときに考える）" },
 ] as const;
 
 type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[] };
@@ -283,7 +283,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `問診の結果_${file.savedAt.slice(0, 10)}.json`;
+    link.download = `サイバー問診_続きを再開するためのファイル_${file.savedAt.slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -485,7 +485,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-2 text-std-24B-150 text-solid-gray-900">確かめる対策を選ぶ</legend>
               <p className="text-std-16N-170">
-                チェックリストのうち、病院が止まる穴につながりやすい重点項目から選びます。
+                チェックリストのうち、診療が止まる原因になりやすい重点項目から選びます。
               </p>
               {ITEMS.map((choice) => (
                 <label
@@ -592,10 +592,10 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             </div>
             <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
               <p className="text-std-16N-170">
-                ベンダーの返事が届いたら、前に保存した結果を読み込んで続きから確かめられます。
+                ベンダーの返事が届いたら、前に保存した「続きを再開するためのファイル」（.json）を読み込んで、続きから確かめられます。
               </p>
               <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
-                保存した結果を読み込む
+                続きを再開するためのファイルを読み込む
                 <input type="file" accept="application/json,.json" onChange={loadResult} className="sr-only" />
               </label>
             </div>
@@ -756,8 +756,8 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
         )}
 
         {finished && (
-          <section className={`flex flex-col gap-4 ${panelClass}`} aria-label="止まる穴と次の一手">
-            <h2 className="text-std-24B-150 text-solid-gray-900">病院が止まる穴</h2>
+          <section className={`flex flex-col gap-4 ${panelClass}`} aria-label="診療が止まるおそれがあるところと次にすること">
+            <h2 className="text-std-24B-150 text-solid-gray-900">このままだと診療が止まるおそれがあるところ</h2>
             {card.result.holeCount === 0 ? (
               <p className="text-std-16N-170">
                 今回確認した観点では穴は見つかりませんでした。対策の準拠を保証するものではありません。
@@ -776,7 +776,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
                     ほかに{card.result.holeCount - card.result.holes.length}件の穴があります。
                   </p>
                 )}
-                <h3 className="text-std-20B-150 text-solid-gray-900">次の一手</h3>
+                <h3 className="text-std-20B-150 text-solid-gray-900">次にすること</h3>
                 {STEP_GROUPS.map((group) => (
                   <div key={group.key}>
                     <p className="text-std-16B-170">{group.title}</p>
@@ -788,21 +788,21 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
                   </div>
                 ))}
                 <p className="text-std-16N-170 text-solid-gray-800">
-                  費用の金額は示しません。金額や必要性は、ベンダーへの確認で決めてください。
+                  金額はここでは示しません。いくらかかるか、本当に必要かは、ベンダーに聞いてから決めてください。
                 </p>
               </>
             )}
             <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={saveResult} className={secondaryClass}>
-                  結果をファイルに保存する
+                  続きを再開するためのファイルを保存する
                 </button>
                 <button type="button" onClick={() => window.print()} className={secondaryClass}>
                   説明用の1枚を印刷する
                 </button>
               </div>
               <p className="text-std-16N-170 text-solid-gray-800">
-                ファイルには病院の穴の情報が含まれます。院外に持ち出さないなど、取り扱いに注意してください。病院名は入りません。
+                保存するファイルは、このアプリにもう一度読み込んで、ベンダーの返事の確認から続けるためのものです（拡張子は .json）。Excel や Word では開けません。人に見せるときは「説明用の1枚を印刷する」を使ってください。ファイルには病院の弱いところの情報が入るので、院外に持ち出さないでください。病院名は入りません。
               </p>
             </div>
           </section>
