@@ -219,7 +219,8 @@ const { values } = parseArgs({
 });
 if (!values.note) throw new Error("--note で変更内容を指定してください");
 
-const cases = values.case ? CASES.filter((item) => item.id === values.case) : CASES;
+// --case は ID の先頭で選ぶ。varied_ なら揺れのあるケースだけを動かす
+const cases = values.case ? CASES.filter((item) => item.id.startsWith(values.case!)) : CASES;
 const repeat = Number(values.repeat);
 const tasks = cases.flatMap((testCase) => Array.from({ length: repeat }, (_, index) => ({ testCase, index })));
 const runs: RunResult[] = [];
