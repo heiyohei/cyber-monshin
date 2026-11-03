@@ -2,6 +2,7 @@
 name: reviewer
 description: 実装を SPEC.md と docs/agent-design.md に照らして確認する。機能を作ったあと、コミットの前に使う。
 tools: Read, Grep, Glob
+model: opus
 ---
 あなたは、自分が書いていないコードをレビューします。変更されたファイルを、指定された仕様と比べてください。
 
