@@ -1,12 +1,12 @@
 import { expect, test } from "playwright/test";
 import { CASES } from "../eval/cases";
-import { loadSavedResult, verdictCard } from "./helpers";
+import { expectVerdictComputedFromCard, loadSavedResult, STATUS_WORDS, verdictCard } from "./helpers";
 
 // 実際の Claude を呼ぶので費用がかかる。E2E_PAID=1 のときだけ動く（npm run test:e2e:paid）。
-// 質問や回答の文は毎回少し変わるので、中身は決め打ちせず、画面の形だけを確かめる
-const STATUS_WORDS = ["まだ確かめていません", "回答で確認", "できていない", "わからない"];
+// 質問や回答の文は毎回少し変わるので、中身は決め打ちせず、画面の形と、判定がコードの計算と一致することだけを確かめる
 const VIEWPOINT_NAMES = ["取得", "戻す確認", "切り離し", "手順"];
 const RESULT_WORDS = ["満たす", "満たさない", "曖昧", "回答なし"];
+const STATUS_PATTERN = `(${STATUS_WORDS.join("|")})`;
 
 test.describe("@paid 実際の Claude を呼ぶ", () => {
   test.skip(process.env.E2E_PAID !== "1", "費用がかかるので、E2E_PAID=1 のときだけ動かします");
@@ -41,12 +41,13 @@ test.describe("@paid 実際の Claude を呼ぶ", () => {
 
     // 判定カードの観点は4つ。状態は決まった言葉のどれか
     const card = verdictCard(page);
-    const statusPattern = `(${STATUS_WORDS.join("|")})`;
     for (const name of VIEWPOINT_NAMES) {
-      await expect(card.getByText(new RegExp(`^${name}：${statusPattern}$`))).toBeVisible();
+      await expect(card.getByText(new RegExp(`^${name}：${STATUS_PATTERN}$`))).toBeVisible();
     }
+    // 判定は、Claude が報告した観点の状態から、コードが計算したものになっている
+    const states = await expectVerdictComputedFromCard(page);
     // 1問答えたので、少なくとも1つの観点は回答から読み取られている
-    await expect(card.getByText(/：(回答で確認|できていない|わからない)$/).first()).toBeVisible();
+    expect(Object.values(states).some((status) => status !== "not_asked")).toBe(true);
   });
 
   test("返事の読み解き：保存ファイルを読み込み、返事を貼ると、要件ごとの読み取りが出る", async ({ page }) => {
@@ -68,9 +69,10 @@ test.describe("@paid 実際の Claude を呼ぶ", () => {
 
     // 判定カードの観点は4つのまま。返事で決まった観点は出どころが「ベンダーの返事から」になる
     const card = verdictCard(page);
-    const statusPattern = `(${STATUS_WORDS.join("|")}|できている（ベンダーの返事から）|できていない（ベンダーの返事から）)`;
     for (const name of VIEWPOINT_NAMES) {
-      await expect(card.getByText(new RegExp(`^${name}：${statusPattern}$`))).toBeVisible();
+      await expect(card.getByText(new RegExp(`^${name}：${STATUS_PATTERN}$`))).toBeVisible();
     }
+    // 返事のあとの判定も、観点の状態からコードが計算したものになっている
+    await expectVerdictComputedFromCard(page);
   });
 });

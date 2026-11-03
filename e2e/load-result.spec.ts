@@ -1,5 +1,5 @@
 import { expect, test } from "playwright/test";
-import { loadSavedResult, verdictCard } from "./helpers";
+import { expectVerdictComputedFromCard, loadSavedResult, verdictCard } from "./helpers";
 
 // 保存ファイルを読み込むと、判定、止まる穴、次にすること、質問文、説明用の1枚が、固定データから出る。Claude は呼ばない。
 // 照合する文は src/data/backup.ts の固定データと、e2e/fixtures/saved-result-v1.json の値
@@ -18,6 +18,7 @@ test("保存ファイルの読み込み：結果の画面が固定データか�
   await expect(card.getByText("戻す確認：わからない")).toBeVisible();
   await expect(card.getByText("切り離し：できていない")).toBeVisible();
   await expect(card.getByText("手順：回答で確認")).toBeVisible();
+  await expectVerdictComputedFromCard(page);
 
   // まとめの表に、保存した「分かったこと」が出る
   const summary = page.getByRole("region", { name: "問診のまとめ" });
