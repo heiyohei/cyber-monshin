@@ -59,3 +59,51 @@ export function readVendorAnswer(item: FocusItem, sheets: SheetRows[]): ExcelRea
   if (rows.length === 0) return null;
   return readCheckItem(rows, item.vendorCheckItem);
 }
+
+// ベンダーの回答の読み取り。事業者用の項目がない（項目がない）と、事業者用のシートを読み込んでいない（要確認）も区別する
+export type VendorReading =
+  | ExcelReading<VendorAnswer>
+  | { status: "no_item"; answer: "no_item" }
+  | { status: "no_sheet"; answer: "unknown" };
+
+// 気になる点。画面には固定の短い文（CONCERN_TEXTS）を出す
+export type Concern = "last_year_no" | "vendor_not_applicable" | "unreadable";
+
+export const CONCERN_TEXTS: Record<Concern, string> = {
+  last_year_no: "去年は「いいえ」でした",
+  vendor_not_applicable: "ベンダーが対象外にしています。病院が受け持つ項目です",
+  unreadable: "読み取れませんでした。選び直してください",
+};
+
+export type ItemReading = {
+  itemId: string;
+  lastYear: ExcelReading;
+  vendor: VendorReading;
+  concerns: readonly Concern[];
+};
+
+function readVendor(item: FocusItem, sheets: SheetRows[]): VendorReading {
+  if (!item.vendorCheckItem) return { status: "no_item", answer: "no_item" };
+  return readVendorAnswer(item, sheets) ?? { status: "no_sheet", answer: "unknown" };
+}
+
+// 去年が「いいえ」、ベンダーが「対象外」（病院の責任になる）、読み取れなかった、の3つだけ。該当がなければ空
+function concernsOf(lastYear: ExcelReading, vendor: VendorReading): Concern[] {
+  const concerns: Concern[] = [];
+  if (lastYear.answer === "no") concerns.push("last_year_no");
+  if (vendor.answer === "not_applicable") concerns.push("vendor_not_applicable");
+  if (lastYear.status !== "read" || vendor.status === "ambiguous" || vendor.status === "not_found") {
+    concerns.push("unreadable");
+  }
+  return concerns;
+}
+
+// 重点項目のすべてについて、去年の回答（医療機関用）と、事業者用のシートがあればベンダーの回答を読む。
+// 並びは渡した items のまま。Excel はブラウザの中で読み、この結果もサーバーへは送らない
+export function readAllItems(items: readonly FocusItem[], sheets: SheetRows[]): ItemReading[] {
+  return items.map((item) => {
+    const lastYear = readItemAnswer(item, sheets);
+    const vendor = readVendor(item, sheets);
+    return { itemId: item.id, lastYear, vendor, concerns: concernsOf(lastYear, vendor) };
+  });
+}
