@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { getItem } from "../data/items.ts";
+import { stepIdsOf } from "./result.ts";
 import { createSession, itemOf, type InterviewSession } from "./session.ts";
 
 // 手元に保存する結果。病院名、会話の履歴、Excel の中身は入れない。
-// 判定、トップ3、次の一手は読み込むたびに計算するので入れない
+// 判定、トップ3、次の一手は読み込むたびに計算するので入れない。
+// 版2で、次にすることの「やった」印（固定データの次の一手の ID）を足した。版1のファイルは印なしとして読み込める
 export const SAVE_FORMAT = "cyber-monshin-result";
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+const READABLE_VERSIONS = [1, SAVE_VERSION] as const;
 
 const Status = z.enum(["not_asked", "confirmed", "denied", "unknown"]);
 const ShortText = z.string().max(300);
@@ -19,6 +22,8 @@ const ItemResultSchema = z.object({
   sources: z.record(z.string().max(40), z.enum(["answer", "reply"])).optional(),
   reasons: z.record(z.string().max(40), ShortText),
   summary: z.string().max(1000),
+  // 版2から。「やった」印を付けた次の一手の ID。版1にはない
+  done: z.array(z.string().max(80)).max(60).optional(),
   vendorQuestions: z
     .array(
       z.object({
@@ -41,24 +46,28 @@ const ItemResultSchema = z.object({
     .max(3),
 });
 
-// 観点の ID は項目ごとに違うので、形を確かめたあと、項目の固定データと照らす
+// 観点の ID は項目ごとに違うので、形を確かめたあと、項目の固定データと照らす。
+// 版1と版2の両方を読む。版1に「やった」印（done）があれば形式違いとして拒む
 export const SaveFileSchema = z
   .object({
     format: z.literal(SAVE_FORMAT),
-    version: z.literal(SAVE_VERSION),
+    version: z.literal(READABLE_VERSIONS),
     savedAt: z.string().max(40),
     items: z.array(ItemResultSchema).length(1),
   })
-  .refine(({ items: [result] }) => {
+  .refine(({ version, items: [result] }) => {
     const item = getItem(result.itemId);
     if (!item) return false;
+    if (version === 1 && result.done !== undefined) return false;
     const ids = item.viewpoints.map((viewpoint) => viewpoint.id);
+    const stepIds = stepIdsOf(item);
     const keys = Object.keys(result.states);
     return (
       keys.length === ids.length &&
       ids.every((id) => keys.includes(id)) &&
       Object.keys(result.reasons).every((id) => ids.includes(id)) &&
       Object.keys(result.sources ?? {}).every((id) => ids.includes(id)) &&
+      (result.done ?? []).every((id) => stepIds.includes(id)) &&
       result.vendorQuestions.every((question) =>
         question.requirements.every((requirement) => ids.includes(requirement.viewpointId)),
       )
@@ -71,8 +80,11 @@ export function buildSaveFile(
   session: InterviewSession,
   reasons: Partial<Record<string, string>>,
   summary: string,
+  done: readonly string[] = [],
 ): SaveFile {
-  const ids = itemOf(session).viewpoints.map((viewpoint) => viewpoint.id);
+  const item = itemOf(session);
+  const ids = item.viewpoints.map((viewpoint) => viewpoint.id);
+  const marked = new Set(done);
   return {
     format: SAVE_FORMAT,
     version: SAVE_VERSION,
@@ -89,13 +101,18 @@ export function buildSaveFile(
         reasons: Object.fromEntries(ids.flatMap((id) => (reasons[id] ? [[id, reasons[id]!.slice(0, 300)]] : []))),
         summary: summary.slice(0, 1000),
         vendorQuestions: session.vendorQuestions,
+        // この項目の次の一手の ID だけを、固定データの順で入れる（重複や知らない ID は落とす）
+        done: stepIdsOf(item).filter((id) => marked.has(id)),
       },
     ],
   };
 }
 
-// 読み込んだファイルは信頼できない入力。形と値を確かめてから、終わった問診として復元する
-export function sessionFromSaveFile(input: unknown): { session: InterviewSession; file: SaveFile } | null {
+export type LoadedSaveFile = { session: InterviewSession; file: SaveFile; done: string[] };
+
+// 読み込んだファイルは信頼できない入力。形と値を確かめてから、終わった問診として復元する。
+// 「やった」印は問診の状態（署名つきでサーバーへ送るもの）には入れず、別に返す
+export function sessionFromSaveFile(input: unknown): LoadedSaveFile | null {
   const parsed = SaveFileSchema.safeParse(input);
   if (!parsed.success) return null;
 
@@ -106,5 +123,5 @@ export function sessionFromSaveFile(input: unknown): { session: InterviewSession
   session.sources = result.sources ?? {};
   session.vendorQuestions = result.vendorQuestions;
   session.finished = true;
-  return { session, file: parsed.data };
+  return { session, file: parsed.data, done: [...new Set(result.done ?? [])] };
 }

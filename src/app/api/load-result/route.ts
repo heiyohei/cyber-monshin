@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   const loaded = sessionFromSaveFile(json);
   if (!loaded) return fail(400, "このアプリで保存したファイルを選んでください。");
 
-  const { session, file } = loaded;
+  const { session, file, done } = loaded;
   const item = file.items[0];
   return Response.json({
     session: sealSession(session, secret),
@@ -35,5 +35,7 @@ export async function POST(request: Request) {
     reasons: item.reasons,
     summary: item.summary,
     vendor: vendorRequestFor(session),
+    // 次にすることの「やった」印（版1のファイルでは空）
+    done,
   });
 }
