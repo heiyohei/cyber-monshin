@@ -17,7 +17,7 @@ export default function Home() {
         </h1>
         <p className="text-std-16N-170">
           その「はい」、本当に大丈夫？ ―
-          サイバーセキュリティ対策チェックリストを、専門家の目でもう一度
+          サイバーセキュリティ対策を、専門家の目でもう一度
         </p>
       </header>
 

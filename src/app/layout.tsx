@@ -9,7 +9,7 @@ const notoSansJp = Noto_Sans_JP({
 
 export const metadata: Metadata = {
   title: "病院のサイバー問診アシスタント",
-  description: "その「はい」、本当に大丈夫？ サイバーセキュリティ対策チェックリストを、専門家の目でもう一度",
+  description: "その「はい」、本当に大丈夫？ サイバーセキュリティ対策を、専門家の目でもう一度",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
