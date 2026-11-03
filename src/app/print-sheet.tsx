@@ -1,9 +1,9 @@
 import type { Card } from "@/lib/card";
 
 const STEP_GROUPS = [
-  { key: "free", title: "今日、お金をかけずにできること" },
+  { key: "free", title: "今日から院内でできること" },
   { key: "vendor", title: "ベンダーに聞くこと" },
-  { key: "budget", title: "お金がかかること（次にシステムを入れ替えるときに考える）" },
+  { key: "budget", title: "予算を立てて検討すること（システムの入れ替えや、保守の契約の見直しのときに）" },
 ] as const;
 
 // 院長や理事会への説明用の1枚。印刷のときだけ表示する。病院名は手で書き足す
@@ -52,7 +52,7 @@ export function PrintSheet({ card }: { card: Card }) {
               </ul>
             </div>
           ))}
-          <p>金額はここでは示していません。いくらかかるか、本当に必要かは、ベンダーに聞いてから決めます。</p>
+          <p>費用の目安は示していません。必要かどうかと費用は、ベンダーに確かめてから決めます。</p>
         </>
       )}
 

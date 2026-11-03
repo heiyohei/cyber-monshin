@@ -41,9 +41,9 @@ const secondaryClass =
   "min-h-11 w-fit rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring has-[:focus-visible]:focus-ring";
 
 const STEP_GROUPS = [
-  { key: "free", title: "今日、お金をかけずにできること" },
+  { key: "free", title: "今日から院内でできること" },
   { key: "vendor", title: "ベンダーに聞くこと" },
-  { key: "budget", title: "お金がかかること（次にシステムを入れ替えるときに考える）" },
+  { key: "budget", title: "予算を立てて検討すること（システムの入れ替えや、保守の契約の見直しのときに）" },
 ] as const;
 
 type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[] };
@@ -990,7 +990,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                   </div>
                 ))}
                 <p className="text-std-16N-170 text-solid-gray-800">
-                  金額はここでは示しません。いくらかかるか、本当に必要かは、ベンダーに聞いてから決めてください。
+                  費用の目安はここでは示しません。必要かどうかと費用は、ベンダーに確かめてから決めてください。
                 </p>
               </>
             )}
