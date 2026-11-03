@@ -116,16 +116,21 @@ Built with Claude: Japan 2026 の提出作品です（テーマ2「本来、誰�
 重点項目5つ（機器と外部接続の把握、更新プログラム、アカウントと権限、バックアップと復旧、診療を止めない備え）から、確かめる対策を1つ選びます。チェックリストのうち、診療が止まる原因になりやすいものに絞っています。すべての対策を確かめるものではありません。
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Noto Sans JP, sans-serif", "fontSize": "16px", "primaryColor": "#ffffff", "primaryTextColor": "#1a1a1a", "primaryBorderColor": "#0017c1", "lineColor": "#333333", "clusterBkg": "#e8f1fe", "clusterBorder": "#c5d7fb", "titleColor": "#1a1a1a", "edgeLabelBackground": "#ffffff"}}}%%
 flowchart TB
   subgraph S1["1. 問診する"]
     direction LR
-    A["対策を選ぶ"] --> B["始め方を選ぶ<br>サンプル／去年の Excel"] --> C["質問に答える"] --> D["判定カードが変わる"] --> E["結果を見る"]
+    A("対策を選ぶ") --> B("始め方を選ぶ<br>サンプル／去年の Excel") --> C("質問に答える") --> D("判定カードが変わる") --> E("結果を見る")
   end
   subgraph S2["2. ベンダーに聞く（おそれがあれば）"]
     direction LR
-    G["質問を送り、<br>ファイルを保存する"] -.->|返事が届いたら| F["ファイルを読み込み、<br>返事を貼る"] --> H["返事を読み解く"]
+    G("質問を送り、<br>ファイルを保存する") -.->|返事が届いたら| F("ファイルを読み込み、<br>返事を貼る") --> H("返事を読み解く")
   end
   S1 --> S2
+  classDef step fill:#ffffff,stroke:#0017c1,stroke-width:1px,color:#1a1a1a
+  classDef goal fill:#0017c1,stroke:#0017c1,color:#ffffff,font-weight:bold
+  class A,B,C,D,G,F step
+  class E,H goal
 ```
 
 - Excel はこの画面の中で読み、AI へ送るのは選んだ項目の回答だけです
