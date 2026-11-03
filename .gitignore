@@ -166,3 +166,7 @@ eval/runs/
 
 # 手元で試すための架空の記入例（厚生労働省の様式に架空の回答を入れたもの）
 samples/
+
+# 手元だけに置くレビューと案
+docs/review-*.md
+docs/ideas-*.md
