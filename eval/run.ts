@@ -45,7 +45,7 @@ function pickAnswer(text: string, remaining: ViewpointId[], testCase: EvalCase):
 
 // 原因を調べられるよう、1回ごとのやりとりを手元に残す（eval/runs/ は公開しない）
 type TranscriptEntry =
-  | { type: "question"; text: string; picked: string; answer: string }
+  | { type: "question"; text: string; options: string[]; picked: string; answer: string }
   | { type: "report"; viewpointId: string; status: string; reason: string }
   | { type: "vendor"; requirements: { id: string; viewpointId: string; text: string }[]; results: unknown[] }
   | { type: "event"; text: string };
@@ -93,9 +93,13 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
     let answer: string | undefined;
     for (let round = 0; round < MAX_ROUNDS && !session.finished; round += 1) {
       let question = "";
+      let options: string[] = [];
       let continuing = false;
       const emit = (event: InterviewEvent) => {
-        if (event.type === "question") question = event.text;
+        if (event.type === "question") {
+          question = event.text;
+          options = event.options;
+        }
         if (event.type === "can_continue") continuing = true;
         if (event.type === "viewpoint_updated") {
           log.push({ type: "report", viewpointId: event.viewpointId, status: event.status, reason: event.reason });
@@ -111,7 +115,7 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
         continue;
       }
       const picked = pickAnswer(question, remaining, testCase);
-      log.push({ type: "question", text: question, picked: picked.id, answer: picked.answer });
+      log.push({ type: "question", text: question, options, picked: picked.id, answer: picked.answer });
       answer = picked.answer;
     }
 
@@ -195,6 +199,10 @@ function summarize(runs: RunResult[], cases: EvalCase[]) {
       runs.filter((run) => run.afterVerdict !== undefined).length,
     ),
     finished: rate(runs.filter((run) => run.finished).length, runs.length),
+    questions_with_options: rate(
+      runs.flatMap((run) => run.transcript).filter((entry) => entry.type === "question" && entry.options.length >= 2).length,
+      runs.flatMap((run) => run.transcript).filter((entry) => entry.type === "question").length,
+    ),
     errors: runs.filter((run) => run.error).length,
     max_questions: Math.max(...runs.map((run) => run.questions)),
     avg_ms: Math.round(runs.reduce((sum, run) => sum + run.ms, 0) / runs.length),
