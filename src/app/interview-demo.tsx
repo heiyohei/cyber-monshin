@@ -22,6 +22,7 @@ import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
 import type { ReadResult } from "@/lib/quote";
 import type { ImageReading } from "@/lib/read-image";
+import { countSteps, remainingSteps } from "@/lib/result";
 import { buildSaveFile } from "@/lib/save-file";
 import type { InterviewSession, LastYearAnswer, SealedSession, VendorAnswer, VendorRequest } from "@/lib/session";
 
@@ -253,6 +254,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [replyVerdict, setReplyVerdict] = useState<{ before: string; after: string } | null>(null);
   // 直前の強調が、問診の回答によるものか、ベンダーの返事によるものか
   const [recentSource, setRecentSource] = useState<"answer" | "reply">("answer");
+  // 次にすることの「やった」印（固定データの次の一手の ID）。ブラウザの中で持ち、保存ファイル（版2）に入れる。
+  // savedDone は最後に保存または読み込んだときの印。違っていれば「もう一度保存してください」と案内する
+  const [done, setDone] = useState<string[]>([]);
+  const [savedDone, setSavedDone] = useState<string[]>([]);
   const [loadedNotice, setLoadedNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -284,6 +289,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [excelVendor, setExcelVendor] = useState<VendorAnswer>("unknown");
   // いま選んでいる対策の、Excel の読み取り結果。Excel を読んでいなければ null
   const excelCurrent = excel?.find((reading) => reading.itemId === item.id) ?? null;
+  // 「やった」印を、最後に保存（または読み込み）してから変えたか。順番は問わない
+  const doneChanged = done.length !== savedDone.length || done.some((id) => !savedDone.includes(id));
   const [needsCode, setNeedsCode] = useState(false);
   const [code, setCode] = useState("");
   // 待っている間の案内と、読み上げソフトに伝える短い文。どちらも常に置いた領域の文字だけを切り替える
@@ -524,7 +531,16 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     vendorAnswer: VendorAnswer = item.sample.vendorAnswer,
   ) {
     setCard(buildCard(item, initialStates(item), lastYearAnswer));
+    setDone([]);
+    setSavedDone([]);
     return sendInterview({ item_id: item.id, last_year_answer: lastYearAnswer, vendor_answer: vendorAnswer });
+  }
+
+  // 次にすることの「やった」印を付けたり外したりする。残っている件数を読み上げ用の領域に出す
+  function toggleDone(stepId: string, checked: boolean) {
+    const next = checked ? [...done.filter((id) => id !== stepId), stepId] : done.filter((id) => id !== stepId);
+    setDone(next);
+    setLive(`残っていること ${countSteps(remainingSteps(card.result.nextSteps, next))}件。`);
   }
 
   // Excel はこの画面の中だけで読み、サーバーへは送らない
@@ -559,13 +575,14 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
 
   function saveResult() {
     if (!session) return;
-    const file = buildSaveFile(JSON.parse(session.payload) as InterviewSession, reasons, summary);
+    const file = buildSaveFile(JSON.parse(session.payload) as InterviewSession, reasons, summary, done);
     const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = `サイバー問診_続きを再開するためのファイル_${file.savedAt.slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
+    setSavedDone(done);
   }
 
   async function loadResult(event: ChangeEvent<HTMLInputElement>) {
@@ -597,6 +614,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setResults([]);
       setReplyChanges([]);
       setReplyVerdict(null);
+      // 「やった」印はサーバーで形を確かめたもの（版1のファイルでは空）
+      const loadedDone: string[] = Array.isArray(data.done) ? data.done : [];
+      setDone(loadedDone);
+      setSavedDone(loadedDone);
       // 保存ファイルには質問と回答が入っていないので、「これまでの質問と回答」は出さない
       setHistory([]);
       // 保存した日は表示にだけ使う。形式はサーバーで確かめ済みだが、日付が読めなければ出さない
@@ -1594,20 +1615,61 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                     ほかに{card.result.holeCount - card.result.holes.length}件あります。
                   </p>
                 )}
-                <h3 className="text-std-20B-150 text-solid-gray-900">次にすること</h3>
+                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                  <h3 className="text-std-20B-150 text-solid-gray-900">次にすること</h3>
+                  <p className="text-std-16B-170 text-solid-gray-800">
+                    {`残っていること ${countSteps(remainingSteps(card.result.nextSteps, done))}件（全部で${countSteps(card.result.nextSteps)}件）`}
+                  </p>
+                </div>
+                <p className="text-std-16N-170 text-solid-gray-800">
+                  終えたものには「やった」の印を付けてください。印は、保存するファイルと説明用の1枚に残るので、次の担当者に引き継げます。
+                </p>
                 {STEP_GROUPS.map((group) => (
                   <div key={group.key}>
                     <p className="text-std-16B-170">{group.title}</p>
                     <ul className="list-disc pl-6 text-std-16N-170">
-                      {card.result.nextSteps[group.key].map((step) => (
-                        <li key={step.id}>{step.text}</li>
-                      ))}
+                      {card.result.nextSteps[group.key].map((step) => {
+                        // 読み上げ名は「やった」と項目の文を合わせたもの（どの項目の印かが分かるように）
+                        const domId = `step-${step.id.replaceAll(".", "-")}`;
+                        const checked = done.includes(step.id);
+                        return (
+                          <li key={step.id} className={checked ? "text-solid-gray-800" : undefined}>
+                            <div className="flex items-start justify-between gap-3">
+                              <span id={`${domId}-text`}>{step.text}</span>
+                              <label
+                                htmlFor={domId}
+                                className="flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap text-std-16N-170 text-solid-gray-900"
+                              >
+                                <input
+                                  id={domId}
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) => toggleDone(step.id, event.target.checked)}
+                                  aria-labelledby={`${domId}-label ${domId}-text`}
+                                  className="size-5 accent-blue-900 focus-visible:focus-ring"
+                                />
+                                <span id={`${domId}-label`}>やった</span>
+                              </label>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 ))}
                 <p className="text-std-16N-170 text-solid-gray-800">
                   費用の目安はここでは示しません。必要かどうかと費用は、ベンダーに確かめてから決めてください。
                 </p>
+                {doneChanged && (
+                  <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-3">
+                    <p className="text-std-16N-170">
+                      「やった」の印を残すには、もう一度ファイルを保存してください。保存するまでは、画面を閉じると印が消えます。
+                    </p>
+                    <button type="button" onClick={saveResult} className={secondaryClass}>
+                      続きを再開するためのファイルを保存する（「やった」の印を反映した状態）
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </section>
@@ -1654,7 +1716,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               </div>
               <p className="text-std-16N-170 text-solid-gray-800">
                 保存するファイルは、このアプリにもう一度読み込んで、ベンダーの返事の確認から続けるためのものです。Excel や Word
-                では開けません。人に見せるときは「説明用の1枚を印刷する」を使ってください。ファイルには病院の弱いところの情報が入るので、院外に持ち出さないでください。病院名と、これまでの質問と回答の文は入りません。
+                では開けません。人に見せるときは「説明用の1枚を印刷する」を使ってください。ファイルには病院の弱いところの情報が入るので、院外に持ち出さないでください。病院名と、これまでの質問と回答の文は入りません。次にすることに付けた「やった」の印は入ります。
               </p>
             </div>
 
@@ -1827,7 +1889,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         </ul>
       </aside>
 
-      {finished && <PrintSheet card={card} />}
+      {finished && <PrintSheet card={card} done={done} vendor={vendor} />}
     </div>
   );
 }
