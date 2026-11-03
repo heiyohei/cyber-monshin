@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { getItem, ITEMS, PLANNED_ITEMS } from "@/data/items";
 import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
 import type { Evidence, FocusItem } from "@/data/types";
@@ -49,6 +49,11 @@ const STEP_GROUPS = [
 type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[] };
 type TermExchange = { question: string; answer: string };
 type RecentReading = { viewpointId: string; status: keyof typeof STATUS_LABELS; reason: string };
+// 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
+type FocusTarget = "question" | "summary" | "reply" | "error";
+
+// 通信が止まったときに、画面が「確認しています」のままにならないようにする
+const FETCH_TIMEOUT_MS = 90_000;
 
 function WarningBox({
   warning,
@@ -182,9 +187,36 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [excelVendor, setExcelVendor] = useState<VendorAnswer>("unknown");
   const [needsCode, setNeedsCode] = useState(false);
   const [code, setCode] = useState("");
+  // 待っている間の案内と、読み上げソフトに伝える短い文。どちらも常に置いた領域の文字だけを切り替える
+  const [busyMessage, setBusyMessage] = useState("");
+  const [live, setLive] = useState("");
+  const [focusTarget, setFocusTarget] = useState<{ target: FocusTarget; seq: number } | null>(null);
+  const questionRef = useRef<HTMLHeadingElement>(null);
+  const summaryRef = useRef<HTMLHeadingElement>(null);
+  const replyRef = useRef<HTMLTextAreaElement>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const answerRef = useRef<HTMLTextAreaElement>(null);
+
+  function requestFocus(target: FocusTarget) {
+    // 同じ先に続けて移すときも効くよう、番号を進める
+    setFocusTarget((current) => ({ target, seq: (current?.seq ?? 0) + 1 }));
+  }
+
+  // 画面が切り替わってから焦点を移す。見出しに移せば、次に何をするかが読み上げでも分かる
+  useEffect(() => {
+    if (!focusTarget) return;
+    const refs = { question: questionRef, summary: summaryRef, reply: replyRef, error: errorRef };
+    const element = refs[focusTarget.target].current;
+    if (!element) return;
+    element.focus({ preventScroll: true });
+    element.scrollIntoView({ block: focusTarget.target === "error" ? "center" : "start" });
+  }, [focusTarget]);
 
   function handleEvent(event: ServerEvent) {
-    if (event.type === "question") setQuestion(event);
+    if (event.type === "question") {
+      setQuestion(event);
+      requestFocus("question");
+    }
     if (event.type === "message") setNote(event.text);
     if (event.type === "can_continue") setCanContinue(true);
     if (event.type === "item_finished") {
@@ -192,12 +224,17 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
       setSummary(event.summary);
       setVendor(event.vendor);
       setNote("");
+      requestFocus("summary");
     }
-    if (event.type === "error") setError(event.message);
+    if (event.type === "error") {
+      setError(event.message);
+      requestFocus("error");
+    }
     if (event.type === "session") setSession(event.session);
     if (event.type === "verdict_updated") {
       setCard(event.card);
       setVerdictChange(event.card.label);
+      setLive(`判定が「${event.card.label}」に変わりました。`);
     }
     if (event.type === "viewpoint_updated") {
       setCard(event.card);
@@ -206,32 +243,59 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
         ...current.filter((item) => item.viewpointId !== event.viewpointId),
         { viewpointId: event.viewpointId, status: event.status, reason: event.reason },
       ]);
+      const name = event.card.viewpoints.find((viewpoint) => viewpoint.id === event.viewpointId)?.name;
+      setLive(`${name}：${STATUS_LABELS[event.status]}。${event.reason}`);
     }
+  }
+
+  function showError(message: string) {
+    setError(message);
+    requestFocus("error");
   }
 
   async function failFrom(response: Response) {
     const data = await response.json().catch(() => null);
     if (response.status === 401) setNeedsCode(true);
-    setError(data?.error ?? "処理に失敗しました。やり直してください。");
+    showError(data?.error ?? "処理に失敗しました。もう一度ボタンを押してください。");
   }
 
+  function postJson(path: string, body: BodyInit) {
+    return fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  }
+
+  const CONNECTION_ERROR = "接続できないか、時間がかかりすぎました。もう一度ボタンを押してください。";
+
   // 署名つきの状態が届いたときだけ成功とする。失敗したら画面を送信前に戻し、やり直せるようにする
-  async function sendInterview(body: object) {
+  async function sendInterview(body: {
+    session?: SealedSession | null;
+    answer?: string;
+    item_id?: string;
+    last_year_answer?: LastYearAnswer;
+    vendor_answer?: VendorAnswer;
+  }) {
     const before = { question, card, reasons, recent, verdictChange };
     let received = false;
     let failed = false;
     setRecent([]);
     setVerdictChange(null);
     setBusy(true);
+    setBusyMessage(
+      body.answer
+        ? "回答を読み取っています。10〜20秒ほどかかります…"
+        : body.item_id
+          ? "最初の質問を用意しています。10秒ほどかかります…"
+          : "続きを確かめています…",
+    );
     setError("");
     setQuestion(null);
     setCanContinue(false);
     try {
-      const response = await fetch("/api/interview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const response = await postJson("/api/interview", JSON.stringify(body));
       if (!response.ok || !response.body) {
         await failFrom(response);
         failed = true;
@@ -254,10 +318,10 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
           handleEvent(event);
         }
       }
-      if (!received && !failed) setError("処理が途中で止まりました。やり直してください。");
+      if (!received && !failed) showError("処理が途中で止まりました。もう一度ボタンを押してください。");
       return received;
     } catch {
-      setError("接続できませんでした。やり直してください。");
+      showError(CONNECTION_ERROR);
       return false;
     } finally {
       if (!received) {
@@ -334,12 +398,9 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
       return;
     }
     setBusy(true);
+    setBusyMessage("保存したファイルを確かめています…");
     try {
-      const response = await fetch("/api/load-result", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: await selected.text(),
-      });
+      const response = await postJson("/api/load-result", await selected.text());
       if (!response.ok) {
         await failFrom(response);
         return;
@@ -353,8 +414,9 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
       setVendor(data.vendor);
       setFinished(true);
       setResults([]);
+      requestFocus("reply");
     } catch {
-      setError("接続できませんでした。やり直してください。");
+      showError(CONNECTION_ERROR);
     } finally {
       setBusy(false);
     }
@@ -362,8 +424,14 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
 
   async function copyQuestion() {
     if (!vendor) return;
-    await navigator.clipboard.writeText(vendor.question);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(vendor.question);
+      setCopied(true);
+      setLive("質問文をコピーしました。");
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      showError("コピーできませんでした。質問文を選んで、手でコピーしてください。");
+    }
   }
 
   // 個人や機器を特定できる形式があれば、送る前に止めて確かめてもらう
@@ -400,11 +468,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     setTermBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/ask-term", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session, question: termInput }),
-      });
+      const response = await postJson("/api/ask-term", JSON.stringify({ session, question: termInput }));
       if (!response.ok) {
         await failFrom(response);
         return;
@@ -414,8 +478,9 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
       setTermRemaining(data.remaining);
       setSession(data.session);
       setTermInput("");
+      setLive(`ことばの相談の答え：${data.answer}`);
     } catch {
-      setError("接続できませんでした。やり直してください。");
+      showError(CONNECTION_ERROR);
     } finally {
       setTermBusy(false);
     }
@@ -451,13 +516,10 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     if (!checked && needsPersonalInfoCheck(reply, "reply")) return;
     setWarning(null);
     setBusy(true);
+    setBusyMessage("返事を読み取っています。10秒ほどかかります…");
     setError("");
     try {
-      const response = await fetch("/api/verify-reply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session, reply }),
-      });
+      const response = await postJson("/api/verify-reply", JSON.stringify({ session, reply }));
       if (!response.ok) {
         await failFrom(response);
         return;
@@ -483,7 +545,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
       });
       setSession(data.session);
     } catch {
-      setError("接続できませんでした。やり直してください。");
+      showError(CONNECTION_ERROR);
     } finally {
       setBusy(false);
     }
@@ -493,10 +555,22 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     <div className="grid gap-8 lg:grid-cols-2">
       <section className="flex flex-col gap-6" aria-label="問診とベンダーの返事">
         {error && (
-          <p role="alert" className="rounded-8 border-2 border-error-1 bg-white p-4 text-std-16B-170 text-error-1">
+          <p
+            ref={errorRef}
+            tabIndex={-1}
+            role="alert"
+            className="rounded-8 border-2 border-error-1 bg-white p-4 text-std-16B-170 text-error-1 focus-visible:focus-ring"
+          >
             {error}
           </p>
         )}
+
+        <p aria-live="polite" className={busy ? "text-std-16N-170" : "sr-only"}>
+          {busy ? busyMessage : ""}
+        </p>
+        <p aria-live="polite" className="sr-only">
+          {live}
+        </p>
 
         {needsCode && (
           <form onSubmit={submitCode} className="flex flex-col gap-2">
@@ -638,12 +712,6 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
           </div>
         )}
 
-        {busy && (
-          <p aria-live="polite" className="text-std-16N-170">
-            確認しています…
-          </p>
-        )}
-
         {canContinue && !busy && (
           <button type="button" onClick={() => sendInterview({ session })} className={buttonClass}>
             続ける
@@ -672,7 +740,9 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
         )}
 
         {question && !busy && (
-          <h2 className="text-std-20B-150 text-solid-gray-900">質問に答える</h2>
+          <h2 ref={questionRef} tabIndex={-1} className="text-std-20B-150 text-solid-gray-900 focus-visible:focus-ring">
+            質問に答える
+          </h2>
         )}
 
         {question && !busy && (
@@ -687,7 +757,10 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
                   <button
                     key={option}
                     type="button"
-                    onClick={() => setAnswer(option)}
+                    onClick={() => {
+                      setAnswer(option);
+                      answerRef.current?.focus();
+                    }}
                     className="min-h-11 rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring"
                   >
                     {option}
@@ -700,6 +773,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             </label>
             <textarea
               id="answer"
+              ref={answerRef}
               rows={3}
               maxLength={1000}
               value={answer}
@@ -768,7 +842,9 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
 
         {finished && (
           <section className={`flex flex-col gap-3 ${panelClass}`} aria-label="問診のまとめ">
-            <h2 className="text-std-24B-150 text-solid-gray-900">問診のまとめ</h2>
+            <h2 ref={summaryRef} tabIndex={-1} className="text-std-24B-150 text-solid-gray-900 focus-visible:focus-ring">
+              問診のまとめ
+            </h2>
             {summary && <p className="text-std-16N-170">{summary}</p>}
             <table className="w-full border-collapse text-left text-std-16N-170">
               <thead>
@@ -857,6 +933,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
             </label>
             <textarea
               id="reply"
+              ref={replyRef}
               rows={5}
               maxLength={4000}
               value={reply}
@@ -906,7 +983,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
         <p className="rounded-8 bg-solid-gray-50 px-3 py-2 text-std-16B-170 text-solid-gray-800">
           判定カード：回答から読み取った内容で、自動で更新されます
         </p>
-        <div aria-live="polite">
+        <div>
           <p className="text-std-16N-170 text-solid-gray-800">
             {card.itemName}（{checkItemNumbers(card)}）
           </p>
