@@ -4,10 +4,12 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type Rea
 import { getItem, ITEMS, PLANNED_ITEMS } from "@/data/items";
 import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
 import type { Evidence, FocusItem } from "@/data/types";
+import { InterviewHistory } from "./interview-history";
 import { PrintSheet } from "./print-sheet";
 import { TermText } from "./term-text";
 import { buildCard, statusLabel, vendorMessage, type Card } from "@/lib/card";
 import { CONCERN_TEXTS, readAllItems, type ItemReading } from "@/lib/checklist-excel";
+import { appendHistory, attachReadings, upsertReading, type HistoryEntry, type HistoryReading } from "@/lib/history";
 import { initialStates, type ViewpointStatus } from "@/lib/verdict";
 import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
@@ -53,7 +55,8 @@ function replyChangeText(change: ReplyChange): string {
 
 type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[] };
 type TermExchange = { question: string; answer: string };
-type RecentReading = { viewpointId: string; status: ViewpointStatus; reason: string };
+// 直前の回答から読み取った観点。「これまでの質問と回答」に付ける読み取りと同じ形
+type RecentReading = HistoryReading;
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
 type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code" | "excel" | "term";
 // 送る前に、この画面の中で縮めた写真。dataUrl は表示に、data（base64）は送信に使う
@@ -250,6 +253,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [warning, setWarning] = useState<PersonalInfoWarning | null>(null);
   // 直前の回答から読み取った観点。左に一覧を出し、右のカードの同じ行を強調して、つながりを見せる
   const [recent, setRecent] = useState<RecentReading[]>([]);
+  // これまでの質問と回答。ブラウザの中だけで持ち、サーバーへは送らず、保存ファイルにも入れない
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [verdictChange, setVerdictChange] = useState<string | null>(null);
   const [termInput, setTermInput] = useState("");
   const termInputRef = useRef<HTMLInputElement>(null);
@@ -363,10 +368,9 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setCard(event.card);
       setReasons((current) => ({ ...current, [event.viewpointId]: event.reason }));
       setRecentSource("answer");
-      setRecent((current) => [
-        ...current.filter((item) => item.viewpointId !== event.viewpointId),
-        { viewpointId: event.viewpointId, status: event.status, reason: event.reason },
-      ]);
+      setRecent((current) =>
+        upsertReading(current, { viewpointId: event.viewpointId, status: event.status, reason: event.reason }),
+      );
       const name = event.card.viewpoints.find((viewpoint) => viewpoint.id === event.viewpointId)?.name;
       setLive(`${name}：${statusLabel(event.status)}。${event.reason}`);
     }
@@ -408,9 +412,14 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     last_year_answer?: LastYearAnswer;
     vendor_answer?: VendorAnswer;
   }) {
-    const before = { question, card, reasons, recent, verdictChange };
+    const before = { question, card, reasons, recent, verdictChange, history };
     let received = false;
     let failed = false;
+    // 回答を送るときは、そのときの質問と回答を「これまでの質問と回答」に控える。読み取りは届いてから付ける。
+    // 失敗したら finally で元に戻すので、同じ回答をやり直しても二重に入らない
+    const pending = body.answer && question ? appendHistory(history, question, body.answer) : null;
+    let readings: HistoryReading[] = [];
+    if (pending) setHistory(pending);
     setRecent([]);
     setVerdictChange(null);
     setBusy(true);
@@ -445,10 +454,15 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           const event = JSON.parse(line) as ServerEvent;
           if (event.type === "session") received = true;
           if (event.type === "error") failed = true;
+          if (event.type === "viewpoint_updated") {
+            readings = upsertReading(readings, { viewpointId: event.viewpointId, status: event.status, reason: event.reason });
+          }
           handleEvent(event);
         }
       }
       if (!received && !failed) showError("処理が途中で止まりました。もう一度ボタンを押してください。");
+      // 署名つきの状態が届いたら、この回の読み取り（直前の回答から読み取ったことと同じ内容）を控えに付ける
+      if (received && pending) setHistory((current) => attachReadings(current, readings));
       return received;
     } catch {
       showError(CONNECTION_ERROR);
@@ -460,6 +474,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
         setReasons(before.reasons);
         setRecent(before.recent);
         setVerdictChange(before.verdictChange);
+        setHistory(before.history);
       }
       setBusy(false);
     }
@@ -571,6 +586,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setResults([]);
       setReplyChanges([]);
       setReplyVerdict(null);
+      // 保存ファイルには質問と回答が入っていないので、「これまでの質問と回答」は出さない
+      setHistory([]);
       // 保存した日は表示にだけ使う。形式はサーバーで確かめ済みだが、日付が読めなければ出さない
       const savedAt = new Date(String((JSON.parse(text) as { savedAt?: string }).savedAt ?? ""));
       const when = Number.isNaN(savedAt.getTime())
@@ -1460,6 +1477,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           </form>
         )}
 
+        {/* 自分の答えを見返せるよう、いまの質問の下に残す。読み取りを待つ間（回答の欄が消えている間）も出す。
+            保存ファイルから再開したときは控えがないので出ない */}
+        {session && !finished && history.length > 0 && <InterviewHistory entries={history} card={card} open />}
+
         {question && !busy && (
           <form onSubmit={submitTerm} className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
             <h2 className="text-std-18B-160 text-solid-gray-900">ことばの相談</h2>
@@ -1540,6 +1561,9 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
             </table>
           </section>
         )}
+
+        {/* まとめのあとも、たたんだ状態で残す（この画面の中だけ。保存ファイルには入らない） */}
+        {finished && history.length > 0 && <InterviewHistory entries={history} card={card} open={false} />}
 
         {finished && (
           <section className={`flex flex-col gap-4 ${panelClass}`} aria-label="診療が止まるおそれがあるところと次にすること">
