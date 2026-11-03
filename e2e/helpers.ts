@@ -1,5 +1,5 @@
 import path from "node:path";
-import { expect, type Page } from "playwright/test";
+import { expect, type Locator, type Page } from "playwright/test";
 import { BACKUP_ITEM } from "../src/data/backup";
 import { statusLabel } from "../src/lib/card";
 import { computeVerdict, VERDICT_LABELS, type ViewpointStates, type ViewpointStatus } from "../src/lib/verdict";
@@ -12,6 +12,14 @@ export async function loadSavedResult(page: Page) {
   await page.goto("/");
   await page.getByLabel("続きを再開するためのファイルを読み込む").setInputFiles(SAVED_RESULT_FIXTURE);
   await expect(page.getByRole("heading", { name: "問診のまとめ" })).toBeVisible();
+}
+
+// 画面の様子を残したいときだけ使う。環境変数 E2E_SCREENSHOT_DIR に置き場所があるときだけ、<name>.png として保存する。
+// ないときは何もしないので、ふだんの実行では画像を作らない。target を渡すとその部品だけ、渡さなければ見えている範囲
+export async function saveScreenshot(page: Page, name: string, target?: Locator) {
+  const dir = process.env.E2E_SCREENSHOT_DIR;
+  if (!dir) return;
+  await (target ?? page).screenshot({ path: path.join(dir, `${name}.png`) });
 }
 
 // 判定カード（右の欄）。観点の状態はここに「観点名：状態の言葉」の形で出る

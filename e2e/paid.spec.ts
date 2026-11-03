@@ -1,6 +1,6 @@
 import { expect, test } from "playwright/test";
 import { CASES } from "../eval/cases";
-import { expectVerdictComputedFromCard, loadSavedResult, STATUS_WORDS, verdictCard } from "./helpers";
+import { expectVerdictComputedFromCard, loadSavedResult, saveScreenshot, STATUS_WORDS, verdictCard } from "./helpers";
 
 // 実際の Claude を呼ぶので費用がかかる。E2E_PAID=1 のときだけ動く（npm run test:e2e:paid）。
 // 質問や回答の文は毎回少し変わるので、中身は決め打ちせず、画面の形と、判定がコードの計算と一致することだけを確かめる
@@ -21,9 +21,11 @@ test.describe("@paid 実際の Claude を呼ぶ", () => {
     const form = page.locator("form").filter({ hasText: "なぜこの質問？" });
     await expect(form.getByRole("button", { name: "回答する" })).toBeDisabled();
 
-    // 選択肢を1つ押すと回答欄に入るだけで、まだ送られない
+    // 選択肢を1つ押すと回答欄に入るだけで、まだ送られない。押した選択肢の文は、あとで履歴に残ることを確かめるのに使う
     const options = form.locator('button[type="button"]');
     await expect(options.first()).toBeVisible();
+    const chosen = (await options.first().textContent()) ?? "";
+    expect(chosen).not.toBe("");
     await options.first().click();
     await expect(form.getByText("選択肢を回答欄に入れました。まだ送っていません。")).toBeVisible();
     await expect(form.getByLabel(/^回答（/)).not.toHaveValue("");
@@ -48,6 +50,23 @@ test.describe("@paid 実際の Claude を呼ぶ", () => {
     const states = await expectVerdictComputedFromCard(page);
     // 1問答えたので、少なくとも1つの観点は回答から読み取られている
     expect(Object.values(states).some((status) => status !== "not_asked")).toBe(true);
+
+    // 「これまでの質問と回答」に、いま送った回答と、読み取ったことが残る（ブラウザの中だけ）。
+    // 1問目だけなので1件。読み取りは届いているので「読み取っています」は消えている
+    const history = page.locator("details").filter({ has: page.locator("summary", { hasText: "これまでの質問と回答（1件）" }) });
+    await expect(history).toBeVisible();
+    // 1問でまとめが出たときは、たたんだ状態で残るので、開いてから中を見る
+    if (await page.getByRole("heading", { name: "問診のまとめ" }).isVisible()) await history.locator("summary").click();
+    const entries = history.locator("ol > li");
+    await expect(entries).toHaveCount(1);
+    await expect(entries.first().locator("dt")).toHaveText(["質問", "回答", "読み取ったこと"]);
+    await expect(entries.first()).toContainText(chosen);
+    await expect(entries.first()).not.toContainText("読み取っています");
+    // 読み取ったことは、判定カードと同じ「観点名：状態の言葉」の形。少なくとも1つの観点が読み取られている
+    await expect(entries.first().getByText(new RegExp(`^(${VIEWPOINT_NAMES.join("|")})：${STATUS_PATTERN}$`)).first()).toBeVisible();
+
+    // E2E_SCREENSHOT_DIR があるときだけ、履歴が見える左の列を画像に残す
+    await saveScreenshot(page, "item3-history", page.getByRole("region", { name: "問診とベンダーの返事" }));
   });
 
   test("返事の読み解き：保存ファイルを読み込み、返事を貼ると、要件ごとの読み取りが出る", async ({ page }) => {

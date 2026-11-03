@@ -23,6 +23,8 @@ test("保存ファイルの読み込み：結果の画面が固定データか�
   // まとめの表に、保存した「分かったこと」が出る
   const summary = page.getByRole("region", { name: "問診のまとめ" });
   await expect(summary.getByRole("row", { name: /戻す確認/ })).toContainText("分からないとの回答でした");
+  // 保存ファイルには質問と回答が入っていないので、「これまでの質問と回答」の欄は出ない
+  await expect(page.getByText(/^これまでの質問と回答/)).toHaveCount(0);
 
   // 止まる穴は影響の順位（固定データ）で並ぶ。切り離し（できていない）→ 戻す確認（わからない）
   const holes = page.getByRole("region", { name: "診療が止まるおそれがあるところと次にすること" });
