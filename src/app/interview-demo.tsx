@@ -55,7 +55,7 @@ type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[
 type TermExchange = { question: string; answer: string };
 type RecentReading = { viewpointId: string; status: ViewpointStatus; reason: string };
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
-type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code" | "excel";
+type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code" | "excel" | "term";
 // 送る前に、この画面の中で縮めた写真。dataUrl は表示に、data（base64）は送信に使う
 type PreparedImage = { dataUrl: string; data: string; width: number; height: number };
 // 返事の検証で状態か確認の出どころが変わった観点。結果の下に出して、何が変わったかを示す
@@ -253,6 +253,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const [verdictChange, setVerdictChange] = useState<string | null>(null);
   const [termInput, setTermInput] = useState("");
   const termInputRef = useRef<HTMLInputElement>(null);
+  // 用語の説明の「ことばの相談で詳しく聞く」で欄に文を入れただけで、まだ送っていないことを文で示す
+  const [termNote, setTermNote] = useState(false);
   const [terms, setTerms] = useState<TermExchange[]>([]);
   const [termRemaining, setTermRemaining] = useState<number | null>(null);
   const [termBusy, setTermBusy] = useState(false);
@@ -311,14 +313,20 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       image: imageRef,
       code: codeRef,
       excel: excelRef,
+      term: termInputRef,
     };
     const element = refs[focusTarget.target].current;
     if (!element) return;
     element.focus({ preventScroll: true });
     // 次の質問の上には「直前の回答から読み取ったこと」が出るので、あればそこから見せる
     const top = focusTarget.target === "question" ? (recentRef.current ?? element) : element;
-    // Excel の一覧の行から選んだときは、表が見えたまま最小限だけ動かす
-    const block = focusTarget.target === "error" ? "center" : focusTarget.target === "excel" ? "nearest" : "start";
+    // Excel の一覧の行から選んだときと、ことばの相談の欄へ移すときは、周りが見えたまま最小限だけ動かす
+    const block =
+      focusTarget.target === "error"
+        ? "center"
+        : focusTarget.target === "excel" || focusTarget.target === "term"
+          ? "nearest"
+          : "start";
     top.scrollIntoView({ block });
   }, [focusTarget]);
 
@@ -647,6 +655,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setTermRemaining(data.remaining);
       setSession(data.session);
       setTermInput("");
+      setTermNote(false);
       setLive(`ことばの相談の答え：${data.answer}`);
     } catch {
       showError(CONNECTION_ERROR);
@@ -660,13 +669,18 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     await sendTerm(false);
   }
 
-  // 用語の短い説明の「もっと詳しく聞く」。問診の途中（ことばの相談の欄があるとき）だけ渡し、欄に用語を入れて焦点を移す
+  // 用語の短い説明の「ことばの相談で詳しく聞く」。問診の途中（ことばの相談の欄があり、送れるとき）だけ渡し、
+  // 欄に文を足して焦点を移す。まだ送っていないので、そのことを文と読み上げで示す。
+  // 残りが0回のときと、相談の答えを待っている間（届いた時点で欄が空になる）は渡さない
   const askMore =
-    question && !busy
+    question && !busy && !termBusy && termRemaining !== 0
       ? (term: string) => {
-          setTermInput(`「${term}」について、もう少し詳しく教えてください。`);
+          const sentence = `「${term}」について、もう少し詳しく教えてください。`;
+          setTermInput((current) => (current.trim() ? `${current.trim()} ${sentence}` : sentence).slice(0, 500));
           if (warning?.target === "term") setWarning(null);
-          termInputRef.current?.focus();
+          setTermNote(true);
+          setLive("ことばの相談の欄に質問を入れました。そのまま送るなら「聞く」を押してください。");
+          requestFocus("term");
         }
       : undefined;
 
@@ -1450,7 +1464,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           <form onSubmit={submitTerm} className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
             <h2 className="text-std-18B-160 text-solid-gray-900">ことばの相談</h2>
             <p className="text-std-16N-170 text-solid-gray-800">
-              質問や根拠の中の、点線の下線がある言葉は、押すと短い説明が出ます。それでも分からない言葉があれば、ここで聞いてください。判定には使いません。
+              質問、根拠、判定カードの文の中で、点線の下線がある言葉は、押すと短い説明が出ます。それでも分からない言葉は、ここで聞けます。判定には使いません。
               {termRemaining !== null && `（あと${termRemaining}回）`}
             </p>
             {terms.length > 0 && (
@@ -1475,12 +1489,18 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               placeholder="例：「バックアップ」とは何ですか？"
               onChange={(event) => {
                 setTermInput(event.target.value);
+                setTermNote(false);
                 if (warning?.target === "term") setWarning(null);
               }}
               className={fieldClass}
             />
             {warning?.target === "term" && (
               <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
+            )}
+            {termNote && (
+              <p className="text-std-16N-170 text-solid-gray-800">
+                ことばの相談の欄に質問を入れました。まだ送っていません。そのまま送るなら「聞く」を押してください。書き直してもかまいません。
+              </p>
             )}
             <button
               type="submit"

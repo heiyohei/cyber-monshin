@@ -26,9 +26,10 @@ test("用語の説明：根拠の原文の言葉を押すと短い説明が開�
   await expect(box).toBeVisible();
   await expect(box).toContainText("バックアップ");
   await expect(box).toContainText("データの控えを、別の場所に取っておくこと。");
-  // 問診の途中ではないので、ことばの相談へつなぐボタンは出ない
-  await expect(box.getByRole("button", { name: /もっと詳しく聞く/ })).toHaveCount(0);
-  await expect(box.getByRole("button", { name: "閉じる" })).toBeVisible();
+  // このアプリで作った説明だと分かる。問診の途中ではないので、ことばの相談へつなぐボタンは出ない
+  await expect(box).toContainText("このアプリで作った説明で、厚生労働省の資料の文ではありません");
+  await expect(box.getByRole("button", { name: /ことばの相談で詳しく聞く/ })).toHaveCount(0);
+  await expect(box.getByRole("button", { name: /^閉じる/ })).toBeVisible();
 
   // もう一度押すと閉じる
   await button.click();
@@ -39,7 +40,7 @@ test("用語の説明：根拠の原文の言葉を押すと短い説明が開�
   const procedure = checkItem.getByRole("button", { name: "復旧手順", exact: true });
   await procedure.click();
   await expect(box).toContainText("誰が何をどの順番で行えば元に戻せるかを書いた手順のこと。");
-  await box.getByRole("button", { name: "閉じる" }).click();
+  await box.getByRole("button", { name: /^閉じる/ }).click();
   await expect(box).toBeHidden();
   await expect(procedure).toBeFocused();
 });
