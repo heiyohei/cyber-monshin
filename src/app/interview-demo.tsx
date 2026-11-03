@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { getItem, ITEMS, PLANNED_ITEMS } from "@/data/items";
 import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
 import type { Evidence, FocusItem } from "@/data/types";
@@ -156,7 +156,8 @@ function verdictNote(card: Card, started: boolean): string {
   }
 }
 
-export function InterviewDemo({ initialCard }: { initialCard: Card }) {
+// notice は、保証しないことやデータの扱いの注意書き。問診が始まったらたたんで、質問を上に出す
+export function InterviewDemo({ initialCard, notice }: { initialCard: Card; notice: ReactNode }) {
   const [card, setCard] = useState(initialCard);
   const [itemId, setItemId] = useState(initialCard.itemId);
   const item: FocusItem = getItem(itemId) ?? ITEMS[0];
@@ -183,6 +184,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [termRemaining, setTermRemaining] = useState<number | null>(null);
   const [termBusy, setTermBusy] = useState(false);
   const [excel, setExcel] = useState<ExcelReading | null>(null);
+  const [excelNotice, setExcelNotice] = useState("");
   const [excelAnswer, setExcelAnswer] = useState<LastYearAnswer>("unknown");
   const [excelVendor, setExcelVendor] = useState<VendorAnswer>("unknown");
   const [needsCode, setNeedsCode] = useState(false);
@@ -340,6 +342,8 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     if (!chosen) return;
     setItemId(id);
     setCard(buildCard(chosen, initialStates(chosen), chosen.sample.lastYearAnswer));
+    // 読み取る項目が変わるので、Excel の結果は捨てる。黙って消さず、選び直しを促す
+    if (excel) setExcelNotice("確かめる対策を変えたので、Excel を選び直してください。読み取る項目が変わります。");
     setExcel(null);
   }
 
@@ -357,8 +361,9 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     event.target.value = "";
     if (selected.length === 0) return;
     setError("");
+    setExcelNotice("");
     if (selected.length > 2 || selected.some((file) => file.size > 5_000_000)) {
-      setError("チェックリストの Excel を2つまで選んでください。1つ5MBまでです。");
+      showError("チェックリストの Excel を2つまで選んでください。1つ5MBまでです。");
       return;
     }
     try {
@@ -553,6 +558,19 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
+      <div className="lg:col-span-2 print:hidden">
+        {session ? (
+          <details className="rounded-8 bg-solid-gray-50 px-4 py-3 text-std-16N-170 text-solid-gray-800">
+            <summary className="cursor-pointer text-std-16B-170 focus-visible:focus-ring">
+              このアプリについて（保証しないこと、入力してはいけないこと、データの扱い）
+            </summary>
+            <div className="mt-2">{notice}</div>
+          </details>
+        ) : (
+          notice
+        )}
+      </div>
+
       <section className="flex flex-col gap-6" aria-label="問診とベンダーの返事">
         {error && (
           <p
@@ -591,59 +609,72 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
         )}
 
         {!session && !busy && (
-          <div className={`flex flex-col gap-3 ${panelClass}`}>
-            <fieldset className="flex flex-col gap-2">
-              <legend className="mb-2 text-std-24B-150 text-solid-gray-900">確かめる対策を選ぶ</legend>
+          <div className="flex flex-col gap-6">
+            <section className={`flex flex-col gap-3 ${panelClass}`} aria-labelledby="start-sample">
+              <h2 id="start-sample" className="text-std-24B-150 text-solid-gray-900">
+                1. サンプルで試す
+              </h2>
               <p className="text-std-16N-170">
-                チェックリストのうち、診療が止まる原因になりやすい重点項目から選びます。
+                {SAMPLE_HOSPITAL.name}の担当者になったつもりで、質問に答えてみてください。
+                {sampleDescription(item)}
               </p>
-              {ITEMS.map((choice) => (
-                <label
-                  key={choice.id}
-                  className="flex cursor-pointer items-start gap-3 rounded-8 border border-solid-gray-420 p-3 has-[:checked]:border-blue-900 has-[:checked]:bg-blue-50 has-[:focus-visible]:focus-ring"
-                >
-                  <input
-                    type="radio"
-                    name="item"
-                    value={choice.id}
-                    checked={itemId === choice.id}
-                    onChange={() => chooseItem(choice.id)}
-                    className="mt-1.5 size-5 accent-blue-900"
-                  />
-                  <span className="text-std-16N-170">
-                    <span className="text-std-16B-170">{choice.name}</span>（チェック項目 {checkItemNumbers(choice)}）
-                    <br />
-                    <span className="text-solid-gray-800">攻撃の段階：{choice.stage}</span>
-                  </span>
-                </label>
-              ))}
-              {PLANNED_ITEMS.map((planned) => (
-                <div
-                  key={planned.id}
-                  className="flex items-start justify-between gap-3 rounded-8 border border-dashed border-solid-gray-420 p-3 text-std-16N-170 text-solid-gray-800"
-                >
-                  <span>
-                    {planned.name}（チェック項目 {planned.checkItems.join("、")}）
-                  </span>
-                  <span className="whitespace-nowrap">今後の拡張</span>
-                </div>
-              ))}
-            </fieldset>
-            <h2 className="border-t border-solid-gray-200 pt-4 text-std-20B-150 text-solid-gray-900">サンプルで試す</h2>
-            <p className="text-std-16N-170">
-              {SAMPLE_HOSPITAL.name}の担当者になったつもりで、質問に答えてみてください。
-              {sampleDescription(item)}
-            </p>
-            <p className="text-std-16N-170 text-solid-gray-800">
-              実際の病院の情報は入れないでください。回答はこの画面を閉じると消えます。
-            </p>
-            <button type="button" onClick={() => start()} className={buttonClass}>
-              サンプルで試す
-            </button>
-            <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
+              <p className="text-std-16N-170 text-solid-gray-800">
+                実際の病院の情報は入れないでください。回答はこの画面を閉じると消えます。
+              </p>
+              <button type="button" onClick={() => start()} className={buttonClass}>
+                サンプルで試す
+              </button>
+              <details className="rounded-8 border border-solid-gray-200 p-3">
+                <summary className="cursor-pointer text-std-16B-170 text-blue-900 underline focus-visible:focus-ring">
+                  確かめる対策を変える（いまは「{item.name}」）
+                </summary>
+                <fieldset className="mt-3 flex flex-col gap-2">
+                  <legend className="sr-only">確かめる対策</legend>
+                  <p className="text-std-16N-170">
+                    チェックリストのうち、診療が止まる原因になりやすい重点項目5つから選びます。攻撃の流れの順（入られる →
+                    広がる → 戻せない → 止まる）に並んでいます。サンプルと Excel のどちらにも使います。
+                  </p>
+                  {ITEMS.map((choice) => (
+                    <label
+                      key={choice.id}
+                      className="flex cursor-pointer items-start gap-3 rounded-8 border border-solid-gray-420 p-3 has-[:checked]:border-blue-900 has-[:checked]:bg-blue-50 has-[:focus-visible]:focus-ring"
+                    >
+                      <input
+                        type="radio"
+                        name="item"
+                        value={choice.id}
+                        checked={itemId === choice.id}
+                        onChange={() => chooseItem(choice.id)}
+                        className="mt-1.5 size-5 accent-blue-900"
+                      />
+                      <span className="text-std-16N-170">
+                        <span className="text-std-16B-170">{choice.name}</span>（チェック項目 {checkItemNumbers(choice)}）
+                        <br />
+                        <span className="text-solid-gray-800">攻撃の流れ：{choice.stage}</span>
+                      </span>
+                    </label>
+                  ))}
+                  {PLANNED_ITEMS.map((planned) => (
+                    <div
+                      key={planned.id}
+                      className="flex items-start justify-between gap-3 rounded-8 border border-dashed border-solid-gray-420 p-3 text-std-16N-170 text-solid-gray-800"
+                    >
+                      <span>
+                        {planned.name}（チェック項目 {planned.checkItems.join("、")}）
+                      </span>
+                      <span className="whitespace-nowrap">今後の拡張</span>
+                    </div>
+                  ))}
+                </fieldset>
+              </details>
+            </section>
+            <section className={`flex flex-col gap-3 ${panelClass}`} aria-labelledby="start-excel">
+              <h2 id="start-excel" className="text-std-24B-150 text-solid-gray-900">
+                2. 去年のチェックリスト（Excel）から始める
+              </h2>
               <p className="text-std-16N-170">
-                去年のチェックリスト（Excel）から始めることもできます。医療機関用と事業者用の2つを一緒に選ぶと、ベンダーの回答も読み取ります。Excel
-                はこの画面の中で読み、送るのは {checkItemNumbers(item)} の回答だけです。
+                医療機関用と事業者用の2つを一緒に選ぶと、ベンダーの回答も読み取ります。Excel
+                はこの画面の中で読み、送るのは {checkItemNumbers(item)}（{item.name}）の回答だけです。
               </p>
               <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
                 Excel を読み込む
@@ -655,6 +686,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
                   className="sr-only"
                 />
               </label>
+              {excelNotice && <p className="text-std-16N-170 text-solid-gray-800">{excelNotice}</p>}
               {excel && (
                 <div className="flex flex-col gap-2 rounded-8 bg-solid-gray-50 p-4">
                   <p className="text-std-16N-170">
@@ -699,16 +731,19 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
                   </button>
                 </div>
               )}
-            </div>
-            <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
+            </section>
+            <section className={`flex flex-col gap-3 ${panelClass}`} aria-labelledby="start-resume">
+              <h2 id="start-resume" className="text-std-24B-150 text-solid-gray-900">
+                3. 保存したファイルから続ける
+              </h2>
               <p className="text-std-16N-170">
-                ベンダーの返事が届いたら、前に保存した「続きを再開するためのファイル」（.json）を読み込んで、続きから確かめられます。
+                ベンダーの返事が届いたら、前に保存した「続きを再開するためのファイル」を読み込んで、返事の確認から続けられます。
               </p>
               <label className={`flex cursor-pointer items-center justify-center ${secondaryClass}`}>
                 続きを再開するためのファイルを読み込む
                 <input type="file" accept="application/json,.json" onChange={loadResult} className="sr-only" />
               </label>
-            </div>
+            </section>
           </div>
         )}
 

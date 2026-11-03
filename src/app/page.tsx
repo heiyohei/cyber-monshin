@@ -21,15 +21,21 @@ export default function Home() {
         </p>
       </header>
 
-      <ul className="list-disc space-y-1 rounded-8 bg-solid-gray-50 py-4 pr-4 pl-9 text-std-16N-170 text-solid-gray-800">
-        <li>対策の準拠を保証するものではなく、法的な判断もしません。</li>
-        <li>厚生労働省の公式ツールではありません。</li>
-        <li>すべての対策を確かめるものではありません。チェックリストのうち、診療が止まる原因になりやすい重点項目5つを確かめます。</li>
-        <li>患者情報などの機微な情報は入力しないでください。回答はこのサイトに保存しませんが、処理のため AI の Claude を提供する Anthropic 社へ送ります。</li>
-        <li>黒戸記念病院と黒戸町は架空です。</li>
-      </ul>
-
-      <InterviewDemo initialCard={buildCard(item, initialStates(item), item.sample.lastYearAnswer)} />
+      <InterviewDemo
+        initialCard={buildCard(item, initialStates(item), item.sample.lastYearAnswer)}
+        notice={
+          <ul className="list-disc space-y-1 rounded-8 bg-solid-gray-50 py-4 pr-4 pl-9 text-std-16N-170 text-solid-gray-800">
+            <li>
+              患者さんの情報など、他人に知られてはいけない情報は入力しないでください。回答はこのサイトに保存しませんが、処理のため
+              AI（Anthropic 社の Claude）へ送ります。
+            </li>
+            <li>対策が基準を満たしていると保証するものではなく、法的な判断もしません。</li>
+            <li>厚生労働省の公式ツールではありません。</li>
+            <li>すべての対策を確かめるものではありません。チェックリストのうち、診療が止まる原因になりやすい重点項目5つを確かめます。</li>
+            <li>黒戸（くろうど）記念病院と黒戸町は架空です。</li>
+          </ul>
+        }
+      />
 
       <footer className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4 text-dns-14N-130 text-solid-gray-800">
         <p>
