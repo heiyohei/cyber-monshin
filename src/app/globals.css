@@ -19,6 +19,26 @@
   box-shadow: 0 0 0 2px var(--color-yellow-300);
 }
 
+/* 印刷では説明用の1枚だけを出す */
+@media print {
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #print-sheet,
+  #print-sheet * {
+    visibility: visible;
+  }
+  #print-sheet {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
+import type { Evidence } from "@/data/backup";
 import { SAMPLE_HOSPITAL } from "@/data/sample";
+import { PrintSheet } from "./print-sheet";
 import type { Card } from "@/lib/card";
 import type { InterviewEvent } from "@/lib/interview";
+import { detectPersonalInfo } from "@/lib/pii";
 import type { ReadResult } from "@/lib/quote";
 import { buildSaveFile } from "@/lib/save-file";
 import type { InterviewSession, SealedSession, VendorRequest } from "@/lib/session";
@@ -40,6 +43,61 @@ const STEP_GROUPS = [
   { key: "budget", title: "予算が必要なこと（次のシステム更改などで検討）" },
 ] as const;
 
+type PersonalInfoWarning = { target: "answer" | "reply"; kinds: string[] };
+
+function WarningBox({
+  warning,
+  onSendAnyway,
+  onRewrite,
+}: {
+  warning: PersonalInfoWarning;
+  onSendAnyway: () => void;
+  onRewrite: () => void;
+}) {
+  return (
+    <div role="alert" className="flex flex-col gap-3 rounded-8 border-2 border-warning-yellow-1 bg-white p-4">
+      <p className="text-std-16B-170">
+        {warning.kinds.join("、")}のような情報が含まれているようです。
+      </p>
+      <p className="text-std-16N-170">
+        病院や担当者、機器を特定できる情報は、消してから送ることをおすすめします。
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={onRewrite} className={buttonClass}>
+          書き直す
+        </button>
+        <button type="button" onClick={onSendAnyway} className={secondaryClass}>
+          このまま送る
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SentContent({ label, text }: { label: string; text: string }) {
+  return (
+    <details className="text-std-16N-170 text-solid-gray-800">
+      <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">AI に送る内容</summary>
+      <div className="mt-2 flex flex-col gap-1 rounded-8 bg-solid-gray-50 p-4">
+        <p>
+          {label}：{text || "（まだ入力されていません）"}
+        </p>
+        <p>
+          ほかに、これまでの質問と回答、観点の状態を送ります。病院名、読み込んだファイル、Excel の中身は送りません。送った内容はこのサイトに保存しません。
+        </p>
+      </div>
+    </details>
+  );
+}
+
+function EvidenceText({ evidence }: { evidence: Evidence }) {
+  return (
+    <p className="mt-1 text-std-16N-170 text-solid-gray-800">
+      根拠：「{evidence.text}」（{evidence.source}）
+    </p>
+  );
+}
+
 export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [card, setCard] = useState(initialCard);
   const [session, setSession] = useState<SealedSession | null>(null);
@@ -56,6 +114,7 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [canContinue, setCanContinue] = useState(false);
+  const [warning, setWarning] = useState<PersonalInfoWarning | null>(null);
   const [needsCode, setNeedsCode] = useState(false);
   const [code, setCode] = useState("");
 
@@ -195,10 +254,29 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
     setCopied(true);
   }
 
-  async function submitAnswer(event: FormEvent) {
-    event.preventDefault();
+  // 個人や機器を特定できる形式があれば、送る前に止めて確かめてもらう
+  function needsPersonalInfoCheck(text: string, target: PersonalInfoWarning["target"]): boolean {
+    const kinds = detectPersonalInfo(text);
+    if (kinds.length === 0) return false;
+    setWarning({ target, kinds });
+    return true;
+  }
+
+  async function sendAnswer(checked: boolean) {
+    if (!checked && needsPersonalInfoCheck(answer, "answer")) return;
+    setWarning(null);
     const sent = await sendInterview({ session, answer });
     if (sent) setAnswer("");
+  }
+
+  async function submitAnswer(event: FormEvent) {
+    event.preventDefault();
+    await sendAnswer(false);
+  }
+
+  function sendAnyway() {
+    if (warning?.target === "answer") void sendAnswer(true);
+    if (warning?.target === "reply") void sendReply(true);
   }
 
   async function submitCode(event: FormEvent) {
@@ -219,6 +297,12 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
 
   async function submitReply(event: FormEvent) {
     event.preventDefault();
+    await sendReply(false);
+  }
+
+  async function sendReply(checked: boolean) {
+    if (!checked && needsPersonalInfoCheck(reply, "reply")) return;
+    setWarning(null);
     setBusy(true);
     setError("");
     try {
@@ -350,9 +434,16 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
               rows={3}
               maxLength={1000}
               value={answer}
-              onChange={(event) => setAnswer(event.target.value)}
+              onChange={(event) => {
+                setAnswer(event.target.value);
+                if (warning?.target === "answer") setWarning(null);
+              }}
               className={fieldClass}
             />
+            {warning?.target === "answer" && (
+              <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
+            )}
+            <SentContent label="回答" text={answer} />
             <button type="submit" disabled={!answer.trim()} className={buttonClass}>
               回答する
             </button>
@@ -406,9 +497,14 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
               </>
             )}
             <div className="flex flex-col gap-2 border-t border-solid-gray-200 pt-4">
-              <button type="button" onClick={saveResult} className={secondaryClass}>
-                結果をファイルに保存する
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={saveResult} className={secondaryClass}>
+                  結果をファイルに保存する
+                </button>
+                <button type="button" onClick={() => window.print()} className={secondaryClass}>
+                  説明用の1枚を印刷する
+                </button>
+              </div>
               <p className="text-std-16N-170 text-solid-gray-800">
                 ファイルには病院の穴の情報が含まれます。院外に持ち出さないなど、取り扱いに注意してください。病院名は入りません。
               </p>
@@ -432,9 +528,21 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
               rows={5}
               maxLength={4000}
               value={reply}
-              onChange={(event) => setReply(event.target.value)}
+              onChange={(event) => {
+                setReply(event.target.value);
+                if (warning?.target === "reply") setWarning(null);
+              }}
               className={fieldClass}
             />
+            {warning?.target === "reply" && (
+              <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
+            )}
+            <details className="text-std-16N-170 text-solid-gray-800">
+              <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">AI に送る内容</summary>
+              <p className="mt-2 rounded-8 bg-solid-gray-50 p-4">
+                貼り付けた返事と、上の確認事項の文、確かめる要件を送ります。問診の回答、病院名、読み込んだファイルの中身は送りません。送った内容はこのサイトに保存しません。
+              </p>
+            </details>
             <button type="submit" disabled={busy || !reply.trim()} className={buttonClass}>
               返事を確かめる
             </button>
@@ -466,6 +574,8 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
         <div aria-live="polite">
           <p className="text-std-16N-170 text-solid-gray-800">バックアップと復旧（3-②）</p>
           <p className="text-std-32B-150 text-solid-gray-900">{card.label}</p>
+          <p className="mt-2 text-std-16N-170 text-solid-gray-800">チェック項目：{card.checkItemText}</p>
+          {card.verdict !== "reviewing" && <EvidenceText evidence={card.itemEvidence} />}
         </div>
         <ul className="flex flex-col gap-3">
           {card.viewpoints.map((viewpoint) => (
@@ -474,13 +584,13 @@ export function InterviewDemo({ initialCard }: { initialCard: Card }) {
                 {viewpoint.name}：{STATUS_LABELS[viewpoint.status]}
               </p>
               {reasons[viewpoint.id] && <p>{reasons[viewpoint.id]}</p>}
-              {viewpoint.status !== "not_asked" && (
-                <p className="text-solid-gray-800">根拠：{viewpoint.evidence}</p>
-              )}
+              {viewpoint.status !== "not_asked" && <EvidenceText evidence={viewpoint.evidence} />}
             </li>
           ))}
         </ul>
       </aside>
+
+      {finished && <PrintSheet card={card} />}
     </div>
   );
 }
