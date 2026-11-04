@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
 import { UPDATE_ITEM } from "../data/update.ts";
-import { computeVerdict, type Verdict, type ViewpointStates, type ViewpointStatus } from "./verdict.ts";
+import { computeVerdict, VERDICT_LABELS, VERDICT_MEANINGS, type Verdict, type ViewpointStates, type ViewpointStatus } from "./verdict.ts";
 
 const STATUSES: ViewpointStatus[] = ["not_asked", "confirmed", "denied", "unknown"];
 
@@ -51,4 +51,26 @@ test("判定：設計の例どおりに変わる", () => {
   };
   assert.equal(computeVerdict(BACKUP_ITEM, states), "reviewing");
   assert.equal(computeVerdict(BACKUP_ITEM, { ...states, restore: "unknown" }), "paper_only");
+});
+
+test("判定の意味：5つの判定すべてに1文の意味があり、名前は変えず、保証や法的な判断に読める言葉を含まない", () => {
+  const verdicts = Object.keys(VERDICT_LABELS) as Verdict[];
+  assert.deepEqual(Object.keys(VERDICT_MEANINGS).sort(), [...verdicts].sort());
+  // 判定の名前は SPEC の4つ（と確認中）のまま
+  assert.deepEqual(VERDICT_LABELS, {
+    no: "いいえ",
+    unknown: "要確認",
+    paper_only: "はい（書類上だけ）",
+    confirmed_by_answer: "はい（回答で確認）",
+    reviewing: "確認中",
+  });
+  for (const verdict of verdicts) {
+    const meaning = VERDICT_MEANINGS[verdict];
+    assert.ok(meaning.endsWith("。"), verdict);
+    // 名前の近くに1行で出すので、短くする
+    assert.ok(meaning.length <= 60, `${verdict} の意味が長い（${meaning.length}文字）`);
+    for (const word of ["保証", "準拠", "満たしています", "法的", "安全です", "問題ありません"]) {
+      assert.ok(!meaning.includes(word), `${verdict} の意味に「${word}」`);
+    }
+  }
 });

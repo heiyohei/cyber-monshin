@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
 import { ITEMS } from "../data/items.ts";
-import { computeResult, countSteps, holeText, remainingSteps, stepIdsOf } from "./result.ts";
+import { computeResult, countSteps, holeText, remainingSteps, stepIdsOf, stepsCountNote } from "./result.ts";
 import { initialStates, type ViewpointStates } from "./verdict.ts";
 
 test("結果：まだ確かめていない観点と確認済みの観点は穴に数えない", () => {
@@ -101,6 +101,21 @@ test("結果：どの観点でも、「わからない」の穴の文は言い�
       const text = holeText(viewpoint, "unknown");
       assert.ok(text.startsWith(`「${viewpoint.goal}」かどうかが分かりません。`), `${item.id}/${viewpoint.id}: ${text}`);
       assert.ok(!text.includes("ません。。"), text);
+    }
+  }
+});
+
+test("結果：次にすることの件数は、止まるおそれの件数の3倍で、数え方の1行の式と合う", () => {
+  for (const item of ITEMS) {
+    // 観点を1つずつ「できていない」にしていき、穴が1件から全部までのときを確かめる（穴が4件で、上位3件だけを示すときも含む）
+    const states: ViewpointStates = initialStates(item);
+    for (const viewpoint of item.viewpoints) {
+      states[viewpoint.id] = "denied";
+      const result = computeResult(item, states);
+      const total = countSteps(result.nextSteps);
+      assert.equal(total, result.holeCount * 3, item.id);
+      for (const key of ["free", "vendor", "budget"] as const) assert.equal(result.nextSteps[key].length, result.holeCount);
+      assert.ok(stepsCountNote(result.holeCount, total).includes(`（${result.holeCount}件×3＝${total}件）`));
     }
   }
 });

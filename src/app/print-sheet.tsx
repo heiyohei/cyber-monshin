@@ -1,6 +1,7 @@
 import { statusLabel, type Card } from "@/lib/card";
 import { countSteps, remainingSteps, type NextStepGroups } from "@/lib/result";
 import type { VendorRequest } from "@/lib/session";
+import { VERDICT_MEANINGS } from "@/lib/verdict";
 
 const STEP_GROUPS = [
   { key: "free", title: "今日から院内でできること", short: "今日から院内でできること" },
@@ -70,6 +71,8 @@ export function PrintSheet({ card, done = [], vendor = null }: { card: Card; don
         </p>
 
         <h2 className={HEADING}>判定：{card.label}</h2>
+        {/* 判定の名前の意味（画面の判定カードと同じ固定の1文）。紙だけを見る人にも名前の意味が分かるように */}
+        <p>{VERDICT_MEANINGS[card.verdict]}</p>
         {card.checkItems.map((checkItem) => (
           <p key={checkItem.no}>
             チェック項目 {checkItem.no}：{checkItem.text}

@@ -15,6 +15,18 @@ export const VERDICT_LABELS: Record<Verdict, string> = {
   reviewing: "確認中",
 };
 
+// 判定の名前が何を意味するかの1文（固定の文）。判定カードと説明用の1枚で、名前のすぐ下に出す。
+// どの観点ができていないかなど、このカードだけのことは、画面の判定の説明（verdictNote）が言う。
+// 準拠の保証や法的判断に読めないよう、「確かめた範囲で分かったこと」の言い方にする。
+// reviewing の名前は「去年の回答：…」なので、去年の答えであることを言う
+export const VERDICT_MEANINGS: Record<Verdict, string> = {
+  reviewing: "去年のチェックリストに書いた答えです。まだ確かめた結果ではありません。",
+  confirmed_by_answer: "今回確かめたことは、すべてできていると分かった、という意味です。",
+  paper_only: "チェックリストでは「はい」にあたりますが、確かめると、足りない備えや分からない備えがある、という意味です。",
+  no: "確かめた結果、この対策でいちばん大事な備えが、できていないという意味です。",
+  unknown: "この対策でいちばん大事な備えが、できているか分からないという意味です。",
+};
+
 type VerdictRule = { primaryViewpoints: readonly string[]; viewpoints: readonly { id: string }[] };
 
 export function initialStates(item: { viewpoints: readonly { id: string }[] }): ViewpointStates {

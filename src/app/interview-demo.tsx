@@ -17,12 +17,12 @@ import {
   type HistoryEntry,
   type HistoryReading,
 } from "@/lib/history";
-import { initialStates, type ViewpointStatus } from "@/lib/verdict";
+import { initialStates, VERDICT_MEANINGS, type ViewpointStatus } from "@/lib/verdict";
 import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
 import type { ReadResult } from "@/lib/quote";
 import type { ImageReading } from "@/lib/read-image";
-import { countSteps, remainingSteps } from "@/lib/result";
+import { countSteps, remainingSteps, stepsCountNote } from "@/lib/result";
 import { buildSaveFile } from "@/lib/save-file";
 import type { InterviewSession, LastYearAnswer, SealedSession, VendorAnswer, VendorRequest } from "@/lib/session";
 
@@ -235,7 +235,9 @@ const VERDICT_STYLES: Record<Card["verdict"], string> = {
   no: "border-red-900 bg-red-50",
 };
 
-// 判定の意味を、観点の状態からコードで組み立てる。Claude には作らせない
+// 判定の説明を、観点の状態からコードで組み立てる。Claude には作らせない。
+// 判定の名前が一般に何を意味するかは、名前のすぐ下の固定の1文（VERDICT_MEANINGS）が言うので、
+// ここでは、このカードだけのこと（どの観点か、何で分かったか）を言い、同じことを繰り返さない
 function verdictNote(card: Card, started: boolean): string {
   const primaryIds = getItem(card.itemId)?.primaryViewpoints ?? [];
   const primary = card.viewpoints.filter((viewpoint) => primaryIds.includes(viewpoint.id));
@@ -249,22 +251,20 @@ function verdictNote(card: Card, started: boolean): string {
   if (unknown.length > 0) parts.push(`${names(unknown)}はわからないままです`);
   switch (card.verdict) {
     case "reviewing":
-      return started
-        ? "まだ確かめていないことがあります。回答に応じて変わります。"
-        : "去年のチェックリストの回答です。問診を始めると、回答に応じて変わります。";
+      return started ? "まだ確かめていないことがあります。回答に応じて変わります。" : "問診を始めると、回答に応じて変わります。";
     case "confirmed_by_answer": {
       // 判定の名前は SPEC の4つのまま。返事で確かめた観点があるときは、この説明で出どころを示す
       const replied = card.viewpoints.filter((viewpoint) => viewpoint.source === "reply").length;
-      if (replied === 0) return "すべての観点が回答で確認できました。実地の確認ではありません。";
-      const from = replied === card.viewpoints.length ? "ベンダーの返事" : "回答とベンダーの返事";
-      return `すべての観点が、${from}から、できていると分かりました。実地の確認ではありません。`;
+      const from =
+        replied === 0 ? "回答" : replied === card.viewpoints.length ? "ベンダーの返事" : "回答とベンダーの返事";
+      return `${from}から分かったことで、実地の確認ではありません。`;
     }
     case "paper_only":
       return `${names(primary)}はできていますが、${parts.join("。")}。`;
     case "no":
       return `${names(primary)}ができていないため、「いいえ」になります。`;
     case "unknown":
-      return `${names(primary)}ができているか分からないため、ベンダーに確かめる必要があります。`;
+      return `${names(primary)}を、ベンダーに確かめる必要があります。`;
   }
 }
 
@@ -1819,21 +1819,27 @@ export function InterviewDemo({
                     ほかに{card.result.holeCount - card.result.holes.length}件あります。
                   </p>
                 )}
-                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                  <h3 ref={stepsRef} tabIndex={-1} className="text-std-20B-150 text-solid-gray-900 focus-visible:focus-ring">
-                    次にすること
-                  </h3>
-                  <p className="text-std-16B-170 text-solid-gray-800">
-                    {`残っていること ${countSteps(remainingSteps(card.result.nextSteps, done))}件（全部で${countSteps(card.result.nextSteps)}件）`}
+                {/* 件数のすぐ下に、何を数えたかを1行で出し、そのすぐ下から一覧を始める（事務職員役が「9件」が何の数か分からず、
+                    一覧が閉じて見えたと言ったため）。分類の見出しにも件数を出し、足すと全部の件数になることが見えるようにする */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                    <h3 ref={stepsRef} tabIndex={-1} className="text-std-20B-150 text-solid-gray-900 focus-visible:focus-ring">
+                      次にすること
+                    </h3>
+                    <p id="steps-count" className="text-std-16B-170 text-solid-gray-800">
+                      {`残っていること ${countSteps(remainingSteps(card.result.nextSteps, done))}件（全部で${countSteps(card.result.nextSteps)}件）`}
+                    </p>
+                  </div>
+                  <p id="steps-count-note" className="text-std-16N-170 text-solid-gray-800">
+                    {stepsCountNote(card.result.holeCount, countSteps(card.result.nextSteps))}
                   </p>
                 </div>
-                <p className="text-std-16N-170 text-solid-gray-800">
-                  終えたものには「やった」の印を付けてください。印は保存するファイルに入るので、次の担当者が読み込めば続きから見られます。説明用の1枚には、残っていることの件数と一部が載ります。
-                </p>
                 {STEP_GROUPS.map((group) => (
-                  <div key={group.key}>
-                    <p className="text-std-16B-170">{group.title}</p>
-                    <ul className="list-disc pl-6 text-std-16N-170">
+                  <div key={group.key} className="rounded-8 border border-solid-gray-200 p-3">
+                    <h4 className="text-std-16B-170">
+                      {group.title}（{card.result.nextSteps[group.key].length}件）
+                    </h4>
+                    <ul className="mt-1 list-disc pl-6 text-std-16N-170">
                       {card.result.nextSteps[group.key].map((step) => {
                         // 読み上げ名は「やった」と項目の文を合わせたもの（どの項目の印かが分かるように）
                         const domId = `step-${step.id.replaceAll(".", "-")}`;
@@ -1863,6 +1869,10 @@ export function InterviewDemo({
                     </ul>
                   </div>
                 ))}
+                {/* 一覧を件数のすぐ下に置くため、印の付け方の説明は一覧のあとに置く（「やった」の欄はそれだけで押せると分かる） */}
+                <p className="text-std-16N-170 text-solid-gray-800">
+                  終えたものには「やった」の印を付けてください。印は保存するファイルに入るので、次の担当者が読み込めば続きから見られます。説明用の1枚には、残っていることの件数と一部が載ります。
+                </p>
                 <p className="text-std-16N-170 text-solid-gray-800">
                   費用の目安はここでは示しません。必要かどうかと費用は、ベンダーに確かめてから決めてください。
                 </p>
@@ -2078,9 +2088,18 @@ export function InterviewDemo({
           <p className="text-std-16N-170 text-solid-gray-800">
             {card.itemName}（チェック項目 {checkItemNumbers(card)}）
           </p>
+          {/* 判定の名前、名前の意味（固定の1文）、このカードの説明の順。意味は名前のすぐ下に置く
+              （事務職員役が「はい（書類上だけ）」の意味を最初に取れなかったため）。読み上げは並びの順で読む */}
           <div className={`mt-2 rounded-8 border-l-8 px-4 py-3 ${VERDICT_STYLES[card.verdict]}`}>
-            <p className="text-std-32B-150 text-solid-gray-900">{card.label}</p>
-            <p className="mt-1 text-std-16N-170 text-solid-gray-900">{verdictNote(card, session !== null)}</p>
+            <p id="verdict-label" className="text-std-32B-150 text-solid-gray-900">
+              {card.label}
+            </p>
+            <p id="verdict-meaning" className="mt-1 text-std-16B-170 text-solid-gray-900">
+              {VERDICT_MEANINGS[card.verdict]}
+            </p>
+            <p id="verdict-note" className="mt-1 text-std-16N-170 text-solid-gray-900">
+              {verdictNote(card, session !== null)}
+            </p>
           </div>
           {card.checkItems.map((checkItem) => (
             // チェック項目は厚生労働省の資料の原文。文字は変えず、用語に印だけを付ける

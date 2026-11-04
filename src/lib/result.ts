@@ -36,6 +36,12 @@ export function countSteps(steps: NextStepGroups): number {
   return steps.free.length + steps.vendor.length + steps.budget.length;
 }
 
+// 「残っていること n件（全部で m件）」のすぐ下に出す、何を数えたかの1行。次にすることは、止まるおそれがある観点1つにつき、
+// 3つの分類（院内、ベンダー、予算）に1つずつ出す（computeResult）。「下の3つ」は、すぐ下に並ぶ分類ごとの一覧のこと
+export function stepsCountNote(holeCount: number, total: number): string {
+  return `上の「診療が止まるおそれがあるところ」${holeCount}件それぞれに、下の3つを1つずつ出しています（${holeCount}件×3＝${total}件）。`;
+}
+
 // 穴の文は「できていない」ときの言い方で書いてある。「わからない」ときは言い切らず、
 // 確かめたいことと、起きうることだけを示す（事務職員役の試用で「分からないと答えたのに言い切られた」と出たため）
 export function holeText(viewpoint: Pick<ViewpointDef, "goal" | "hole">, status: ViewpointStatus): string {
