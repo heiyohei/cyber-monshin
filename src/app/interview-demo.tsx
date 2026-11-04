@@ -6,7 +6,7 @@ import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
 import type { Evidence, FocusItem } from "@/data/types";
 import { InterviewHistory } from "./interview-history";
 import { PrintSheet } from "./print-sheet";
-import { TermText } from "./term-text";
+import { TermLines, TermText } from "./term-text";
 import { buildCard, statusLabel, vendorMessage, type Card } from "@/lib/card";
 import { CONCERN_TEXTS, readAllItems, type ItemReading } from "@/lib/checklist-excel";
 import {
@@ -1813,8 +1813,13 @@ export function InterviewDemo({
             {vendor && (
               <div className="flex flex-col gap-2">
                 <h3 className="text-std-20B-150 text-solid-gray-900">1. ベンダーに質問文を送る</h3>
-                <p className="text-std-16N-170">次の文章を、メールなどでそのままベンダーへ送ってください。</p>
-                <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">{vendorMessage(vendor, card)}</p>
+                <p className="text-std-16N-170">
+                  次の文章を、メールなどでそのままベンダーへ送ってください。点線の下線がある言葉は、押すと短い説明が出ます（コピーする文には入りません）。
+                </p>
+                {/* 質問文と引用の中の用語にも、ほかと同じ点線の下線の説明を付ける。コピーのボタンは元の文字列を写すので、説明は混ざらない */}
+                <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">
+                  <TermLines text={vendorMessage(vendor, card)} onAskMore={askMore} />
+                </p>
                 <button type="button" onClick={() => copyText(vendorMessage(vendor, card), "question")} className={secondaryClass}>
                   {copied === "question" ? "コピーしました" : "質問文をコピーする"}
                 </button>
@@ -1951,7 +1956,9 @@ export function InterviewDemo({
                 {followUpText && (
                   <div className="flex flex-col gap-2">
                     <p className="text-std-16B-170">追加でベンダーに聞く質問文</p>
-                    <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">{followUpText}</p>
+                    <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">
+                      <TermLines text={followUpText} onAskMore={askMore} />
+                    </p>
                     <button type="button" onClick={() => copyText(followUpText, "followUp")} className={secondaryClass}>
                       {copied === "followUp" ? "コピーしました" : "追加の質問文をコピーする"}
                     </button>

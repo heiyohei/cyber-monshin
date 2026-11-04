@@ -42,7 +42,8 @@ test("保存ファイルの読み込み：結果の画面が固定データか�
 
   // ベンダーへの質問文。保存した質問に、根拠の原文と「厚生労働省が示したものではない」の一文をコードが添える
   await expect(page.getByRole("heading", { name: "1. ベンダーに質問文を送る" })).toBeVisible();
-  const message = page.getByText("バックアップについて、次の点を、はい／いいえで教えてください。");
+  // 質問文は行ごとに用語の印を付けて出すので、文全体を入れた段落（見出しのすぐあとの、質問文の箱）を取る
+  const message = page.locator("p").filter({ hasText: "バックアップについて、次の点を、はい／いいえで教えてください。" });
   await expect(message).toContainText("質問の文は当院で作ったもので、厚生労働省が示したものではありません。");
   await expect(message).toContainText("復旧テストなどを実施することが求められる");
   await expect(page.getByRole("button", { name: "質問文をコピーする" })).toBeVisible();

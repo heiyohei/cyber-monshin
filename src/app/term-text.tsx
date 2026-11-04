@@ -26,12 +26,15 @@ export function TermText({
   prefix,
   suffix,
   onAskMore,
+  selectableBox = true,
 }: {
   text: string;
   prefix?: ReactNode;
   suffix?: ReactNode;
   // 問診の途中なら、ことばの相談の入力欄にその用語を入れる。途中でなければ渡さない（ボタンを出さない）
   onAskMore?: (term: string) => void;
+  // false なら、説明の箱の文字を選べないようにする。そのままコピーして送る文（ベンダーへの質問文）に、説明が混ざらないように
+  selectableBox?: boolean;
 }) {
   const boxId = `${useId()}-term`;
   // 開いている用語は、文とその中の位置で覚える。文が変わったら（別の保存ファイルの読み込みなど）閉じた扱いにする
@@ -85,7 +88,9 @@ export function TermText({
         role="group"
         aria-label={current ? `「${current.text}」の説明` : undefined}
         hidden={current === null}
-        className="mt-2 mb-1 block rounded-8 border border-blue-900 bg-blue-50 p-3 text-std-16N-170 text-solid-gray-900"
+        className={`mt-2 mb-1 block rounded-8 border border-blue-900 bg-blue-50 p-3 text-std-16N-170 text-solid-gray-900 ${
+          selectableBox ? "" : "select-none"
+        }`}
       >
         {current && (
           <>
@@ -111,6 +116,24 @@ export function TermText({
           </>
         )}
       </span>
+    </>
+  );
+}
+
+// 何行かある文（ベンダーへの質問文など）の用語に印を付ける。行ごとに TermText にし、説明の箱はその行のすぐ下に開く。
+// 空の行は、行の間の空きとして残す。コピーするときは元の文字列を使い、説明の箱の文字は混ぜない
+export function TermLines({ text, onAskMore }: { text: string; onAskMore?: (term: string) => void }) {
+  return (
+    <>
+      {text.split("\n").map((line, index) =>
+        line.trim() === "" ? (
+          <span key={index} className="block h-4" aria-hidden="true" />
+        ) : (
+          <span key={index} className="block">
+            <TermText text={line} onAskMore={onAskMore} selectableBox={false} />
+          </span>
+        ),
+      )}
     </>
   );
 }

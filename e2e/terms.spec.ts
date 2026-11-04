@@ -64,6 +64,42 @@ test("用語の説明：キーボードでも開ける（Tab で着いて Enter�
   await expect(box).toBeHidden();
 });
 
+// ベンダーへの質問文と「（参考）…原文を引用します」の中の用語にも、同じ点線の下線の説明が出る。
+// コピーのボタンで写す文には、説明の文字が混ざらない
+test("用語の説明：ベンダーへの質問文と引用の中の言葉にも説明が出て、コピーする文には入らない", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await loadSavedResult(page);
+  const message = page.locator("p").filter({ hasText: "質問の文は当院で作ったもので" });
+  await expect(message).toHaveCount(1);
+
+  // 質問文の行（保存した質問）と、引用の行（根拠の原文）の両方に、用語のボタンがある
+  const questionLine = message.locator("span.block").filter({ hasText: "バックアップの控えは、院内のネットワーク" });
+  await expect(questionLine.getByRole("button", { name: "ネットワーク", exact: true })).toBeVisible();
+  const quoteLine = message.locator("span.block").filter({ hasText: "バックアップデータの記録媒体を" });
+  const term = quoteLine.getByRole("button", { name: "記録媒体", exact: true });
+  await expect(term).toBeVisible();
+
+  // 押すと、その行のすぐ下に説明の箱が開く
+  await term.click();
+  await expect(term).toHaveAttribute("aria-expanded", "true");
+  const box = page.locator(`[id="${await term.getAttribute("aria-controls")}"]`);
+  await expect(box).toBeVisible();
+  await expect(box).toContainText("データを書き込んで残しておく入れ物のこと。");
+  // 問診の途中ではないので、ことばの相談へつなぐボタンは出ない
+  await expect(box.getByRole("button", { name: /ことばの相談で詳しく聞く/ })).toHaveCount(0);
+
+  // 箱を開いたままコピーしても、写る文は元の質問文だけ（説明の文字は入らない）
+  await page.getByRole("button", { name: "質問文をコピーする" }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain("バックアップデータの記録媒体を端末及びサーバ装置やネットワークから切り離して保管することが強く求められる。");
+  expect(copied).not.toContain("データを書き込んで残しておく入れ物のこと。");
+  expect(copied).not.toContain("このアプリで作った説明");
+  // 画面の質問文の箱の文字（説明の箱を除く）と、コピーした文が同じ
+  await term.click();
+  await expect(box).toBeHidden();
+  expect((await message.innerText()).replace(/\s+/g, "")).toBe(copied.replace(/\s+/g, ""));
+});
+
 test("用語の説明：印刷の表示では言葉のボタンが出ない", async ({ page }) => {
   await loadSavedResult(page);
   const button = verdictCard(page).getByRole("button", { name: "バックアップ", exact: true }).first();

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { BACKUP_ITEM } from "../data/backup.ts";
 import { ITEMS } from "../data/items.ts";
+import { buildCard, vendorMessage } from "./card.ts";
 import { splitByTerms, type TextPart } from "./glossary.ts";
 
 // 読みやすいように、区切りを「用語」か「文字」の短い形にする
@@ -79,5 +81,35 @@ test("用語の区切り：固定データの文は、つなげると元の文�
     // 同じ用語に2回印を付けていない
     const terms = parts.filter((part) => part.type === "term").map((part) => part.entry.term);
     assert.equal(new Set(terms).size, terms.length, text);
+  }
+});
+
+function markedTerms(text: string): string[] {
+  return splitByTerms(text).flatMap((part) => (part.type === "term" ? [part.entry.term] : []));
+}
+
+// ベンダーへの質問文（Claude が作った質問と、コードが添える根拠の原文の引用）にも、同じ印を付ける。
+// 画面は行ごとに区切るので、行ごとにつなげると元の文に戻り、引用の中の用語（BCP、記録媒体など）にも印が付く
+test("用語の区切り：ベンダーへの質問文の行は、つなげると元の文に戻り、引用の中の用語にも印が付く", () => {
+  const states = { acquire: "confirmed", restore: "unknown", isolate: "denied", procedure: "unknown" } as const;
+  const card = buildCard(BACKUP_ITEM, states, "yes");
+  const request = {
+    question: "バックアップについて、次の点を、はい／いいえで教えてください。\n1. オフライン媒体に控えを保管していますか。",
+    requirements: [
+      { id: "q1_r1", viewpointId: "isolate", text: "切り離して保管している", followUp: "" },
+      { id: "q1_r2", viewpointId: "procedure", text: "戻す手順がある", followUp: "" },
+    ],
+  };
+  const lines = vendorMessage(request, card).split("\n");
+  for (const line of lines) assert.equal(splitByTerms(line).map((part) => part.text).join(""), line);
+  const marked = lines.flatMap(markedTerms);
+  for (const term of ["オフライン媒体", "記録媒体", "BCP"]) assert.ok(marked.includes(term), `${term} に印がない`);
+});
+
+// 足した用語が、固定データの根拠の原文で当たる（別の短い用語に負けない）
+test("用語の区切り：根拠の原文の中の、足した用語に印が付く", () => {
+  const marked = new Set(ITEMS.flatMap((item) => item.viewpoints.flatMap((viewpoint) => markedTerms(viewpoint.evidence.text))));
+  for (const term of ["記録媒体", "MAC アドレス", "電子証明書", "責任分界", "パターンファイル", "運用管理規程"]) {
+    assert.ok(marked.has(term), `${term} に印がない`);
   }
 });
