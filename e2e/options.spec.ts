@@ -119,7 +119,7 @@ test("選択肢：回答のときに合言葉が要ると、欄が出て、確�
         : {
             status: 401,
             contentType: "application/json",
-            body: JSON.stringify({ error: "合言葉の確認が、まだ終わっていません。すぐ下の欄に合言葉を入れて「確かめる」を押してください。" }),
+            body: JSON.stringify({ error: "合言葉の確認が、まだ終わっていません。すぐ下の欄に合言葉を入れて「合言葉を確かめる」を押してください。" }),
           },
     );
   });

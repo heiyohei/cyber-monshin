@@ -21,7 +21,7 @@ export function proxy(request: NextRequest) {
 
   const cookie = request.cookies.get(ACCESS_COOKIE)?.value;
   if (!isAccessCookieValid(cookie, code, secret)) {
-    return deny(401, "合言葉の確認が、まだ終わっていません。すぐ下の欄に合言葉を入れて「確かめる」を押してください。");
+    return deny(401, "合言葉の確認が、まだ終わっていません。すぐ下の欄に合言葉を入れて「合言葉を確かめる」を押してください。");
   }
   return NextResponse.next();
 }

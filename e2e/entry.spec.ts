@@ -68,7 +68,7 @@ test("合言葉：「サンプルで試す」のあとに要るときは、押�
         ? {
             status: 401,
             contentType: "application/json",
-            body: JSON.stringify({ error: "合言葉の確認が、まだ終わっていません。すぐ下の欄に合言葉を入れて「確かめる」を押してください。" }),
+            body: JSON.stringify({ error: "合言葉の確認が、まだ終わっていません。すぐ下の欄に合言葉を入れて「合言葉を確かめる」を押してください。" }),
           }
         : { status: 503, contentType: "application/json", body: JSON.stringify({ error: "（テスト）ここで止めます。" }) },
     );
@@ -123,7 +123,7 @@ test("合言葉：保存ファイルの読み込みで要るときは、読み�
       await route.fulfill({
         status: 401,
         contentType: "application/json",
-        body: JSON.stringify({ error: "合言葉の確認が、まだ終わっていません。すぐ下の欄に合言葉を入れて「確かめる」を押してください。" }),
+        body: JSON.stringify({ error: "合言葉の確認が、まだ終わっていません。すぐ下の欄に合言葉を入れて「合言葉を確かめる」を押してください。" }),
       });
     } else {
       await route.continue();
