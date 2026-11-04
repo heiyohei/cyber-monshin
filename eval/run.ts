@@ -4,7 +4,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { emptyUsage, type Usage } from "../src/lib/claude.ts";
 import { viewpointResult } from "../src/lib/quote.ts";
-import { InterviewStop, runInterview, type InterviewEvent } from "../src/lib/interview.ts";
+import { InterviewStop, QUOTE_ERROR, runInterview, type InterviewEvent } from "../src/lib/interview.ts";
 import { createSession, vendorRequestFor, type InterviewSession } from "../src/lib/session.ts";
 import { computeVerdict } from "../src/lib/verdict.ts";
 import { findItem } from "../src/data/items.ts";
@@ -77,7 +77,7 @@ function pickAnswer(text: string, remaining: string[], testCase: EvalCase): { id
 // 原因を調べられるよう、1回ごとのやりとりを手元に残す（eval/runs/ は公開しない）
 type TranscriptEntry =
   | { type: "question"; text: string; options: string[]; picked: string; answer: string }
-  | { type: "report"; viewpointId: string; status: string; reason: string }
+  | { type: "report"; viewpointId: string; status: string; reason: string; quote: string }
   | {
       type: "vendor";
       requirements: { id: string; viewpointId: string; text: string }[];
@@ -103,6 +103,9 @@ type RunResult = {
   // 返事の中の AI への指示のような文の報告（返事に実在した引用の数）と、ケースの期待どおりか（あるべきときにあり、ないべきときにない）
   suspicious?: number;
   suspiciousOk?: boolean;
+  // ツールの入力を受け付けずにやり直させた回数（全体と、そのうち根拠の言葉が回答に見つからなかった分）
+  toolErrors: number;
+  quoteRejections: number;
   error?: string;
   usage: Usage;
   ms: number;
@@ -125,6 +128,8 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
     finished: false,
     vendorChecks: [],
     fakeQuotes: 0,
+    toolErrors: 0,
+    quoteRejections: 0,
     usage,
     ms: 0,
     transcript: [],
@@ -144,7 +149,13 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
         }
         if (event.type === "can_continue") continuing = true;
         if (event.type === "viewpoint_updated") {
-          log.push({ type: "report", viewpointId: event.viewpointId, status: event.status, reason: event.reason });
+          log.push({
+            type: "report",
+            viewpointId: event.viewpointId,
+            status: event.status,
+            reason: event.reason,
+            quote: event.quote,
+          });
         }
         if (event.type === "message" || event.type === "error") {
           log.push({ type: "event", text: event.type === "message" ? event.text : event.message });
@@ -198,6 +209,18 @@ async function runCase(testCase: EvalCase, repeat: number): Promise<RunResult> {
   } catch (error) {
     result.error = error instanceof InterviewStop ? error.message : error instanceof Error ? error.name : "unknown";
   }
+  // 受け付けなかったツールの入力を、会話の履歴から数える（途中で止まった回も数える）
+  // 回答待ちで終わった回の結果（pendingResults）は、まだ履歴に積まれていないので足す
+  const errors = [
+    ...session.messages.flatMap((message) =>
+      message.role === "user" && typeof message.content !== "string"
+        ? message.content.filter((block) => block.type === "tool_result" && block.is_error)
+        : [],
+    ),
+    ...session.pendingResults.filter((block) => block.is_error),
+  ];
+  result.toolErrors = errors.length;
+  result.quoteRejections = errors.filter((block) => block.type === "tool_result" && block.content === QUOTE_ERROR).length;
   result.ms = Date.now() - startedAt;
   mkdirSync(RUNS_DIR, { recursive: true });
   writeFileSync(`${RUNS_DIR}/${testCase.id}-${repeat}.json`, JSON.stringify(result, null, 2));
@@ -233,6 +256,9 @@ function summarize(runs: RunResult[], cases: EvalCase[]) {
   }
 
   const checks = runs.flatMap((run) => run.vendorChecks);
+  const reports = runs
+    .flatMap((run) => run.transcript)
+    .filter((entry): entry is Extract<TranscriptEntry, { type: "report" }> => entry.type === "report");
   const rate = (ok: number, all: number) => (all === 0 ? null : Number((ok / all).toFixed(3)));
   return {
     detection: rate(detected, planted),
@@ -257,6 +283,14 @@ function summarize(runs: RunResult[], cases: EvalCase[]) {
       runs.flatMap((run) => run.transcript).filter((entry) => entry.type === "question").length,
     ),
     errors: runs.filter((run) => run.error).length,
+    // 受け付けずにやり直させたツールの入力の数（全体と、根拠の言葉が回答に見つからなかった分）。
+    // 根拠の言葉が付いた報告の割合（確かめられずに「わからない」にした報告には付かない）
+    tool_errors: runs.reduce((sum, run) => sum + run.toolErrors, 0),
+    quote_rejections: runs.reduce((sum, run) => sum + run.quoteRejections, 0),
+    reports_with_quote: rate(
+      reports.filter((entry) => entry.quote !== "").length,
+      reports.length,
+    ),
     max_questions: Math.max(...runs.map((run) => run.questions)),
     avg_ms: Math.round(runs.reduce((sum, run) => sum + run.ms, 0) / runs.length),
     cost_usd: Number(runs.reduce((sum, run) => sum + cost(run.usage), 0).toFixed(3)),
@@ -294,6 +328,7 @@ async function worker() {
       `${run.caseId}#${run.repeat} 判定=${run.verdict}${run.verdictOk ? "" : "（不一致）"} 質問=${run.questions} ` +
         `終了=${run.finished} 返事後=${run.afterVerdict ?? "-"}${run.afterVerdictOk === false ? "（不一致）" : ""} ` +
         `指示の報告=${run.suspicious ?? "-"}${run.suspiciousOk === false ? "（不一致）" : ""} ` +
+        `やり直し=${run.toolErrors}（根拠の言葉=${run.quoteRejections}） ` +
         `${vendor} ${run.error ?? ""} $${cost(run.usage).toFixed(3)} ${run.ms}ms`,
     );
     console.log(`  状態 ${states}`);

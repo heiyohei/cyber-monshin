@@ -71,8 +71,21 @@ test.describe("@paid 実際の Claude を呼ぶ", () => {
     // 読み取ったことは、判定カードと同じ「観点名：状態の言葉」の形。少なくとも1つの観点が読み取られている
     await expect(entries.first().getByText(new RegExp(`^(${VIEWPOINT_NAMES.join("|")})：${STATUS_PATTERN}$`)).first()).toBeVisible();
 
-    // E2E_SCREENSHOT_DIR があるときだけ、履歴が見える左の列を画像に残す
+    // 読み取りの根拠として、回答からそのまま抜き出した言葉が「『…』から読み取りました。」の形で出る。
+    // 言葉はサーバーが回答に含まれることを確かめているので、押した選択肢の文の一部になっている（比べ方は src/lib/quote.ts と同じ）
+    const QUOTE_LINE = /^『.+』から読み取りました。$/;
+    const normalize = (text: string) => text.normalize("NFKC").replace(/\s/g, "");
+    const quoteLine = entries.first().getByText(QUOTE_LINE).first();
+    await expect(quoteLine).toBeVisible();
+    const quoted = ((await quoteLine.textContent()) ?? "").replace(/^『/, "").replace(/』から読み取りました。$/, "");
+    expect(normalize(quoted)).not.toBe("");
+    expect(normalize(chosen)).toContain(normalize(quoted));
+    // 右の判定カードの、いまの回答で更新した観点にも同じ形で出る
+    await expect(card.getByText(QUOTE_LINE).first()).toBeVisible();
+
+    // E2E_SCREENSHOT_DIR があるときだけ、履歴が見える左の列と、判定カードを画像に残す
     await saveScreenshot(page, "item3-history", page.getByRole("region", { name: "問診とベンダーの返事" }));
+    await saveScreenshot(page, "a3-quote-card", card);
   });
 
   test("返事の読み解き：保存ファイルを読み込み、返事を貼ると、要件ごとの読み取りが出る", async ({ page }) => {
