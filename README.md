@@ -145,6 +145,13 @@ Built with Claude: Japan 2026 の提出作品です（テーマ2「本来、誰�
 
 問診と返事の検証を、より安いモデルと比べる評価はまだしていません。
 
+呼び出しの共通の工夫：
+
+| 目的 | 使ったもの | 結果 |
+| --- | --- | --- |
+| 毎回同じ指示を使い回して、費用を下げる（問診） | プロンプトキャッシュ（指示とツール定義を、短い間とっておいて使い回す） | 有料の e2e（1回分）では、同じ問診の2回目以降の呼び出しで、指示の部分 2,277 トークン（AI が読む量の単位）をキャッシュから読んだ。キャッシュから読む分の料金は、ふつうの入力の20分の1（100万トークンあたり、ふつうは $4、キャッシュからは $0.2） |
+| Claude が答えを断ったときも、画面が止まらないようにする（問診、返事の読み解き、写真の読み取り） | サーバー側の fallbacks（`fallbacks: "default"`。Anthropic の試験的な機能で、断られたときに別のモデルが続きを引き受ける） | 設定しただけで、実際に切り替わったかは記録していない。切り替わった先のモデルでは、下の評価をしていない |
+
 ### 開発（Claude Code）
 
 | 目的 | 使ったもの | 結果 |
@@ -154,6 +161,7 @@ Built with Claude: Japan 2026 の提出作品です（テーマ2「本来、誰�
 | キーボード操作、読み上げ、印刷で使えるか確かめる | Subagent [アクセシビリティの確かめ役](.claude/agents/a11y-reviewer.md)（Sonnet） | 印刷の1枚が長くなるおそれを見つけた |
 | IT に詳しくない人の目で、画面を試す | Claude Agent SDK と Playwright MCP（[eval/clerk.ts](eval/clerk.ts)）。知っていることと話し方の癖を持つ事務職員役が、実際の画面を操作する。使えるのはブラウザの操作だけ | 2人の役で4回試した。最後まで進んだ3回で、確かめた点12個のうち11個が役の本当の状態どおりだった。報告から、合言葉の欄が見つけにくい、選択肢を押しても送られない、「取得」「切り離し」だけでは分からない、などを直した。1回 約 $0.2、3〜5分。役も Claude なので、本物の事務職員と同じ感じ方とは限らない |
 | 指示を変えた効果を、数字で確かめる | 評価の仕組み（`npm run eval`。結果は [eval/history.jsonl](eval/history.jsonl) に18回分） | 同じ点の要件を、後の結果で上書きする不具合を見つけ、コードで直した。要件の作り方の指示を足したときは、返事の要件の読み取りが91.7% → 100%、返事のあとの判定の一致が83.3% → 100% になった。結果にはばらつきがあるので、1回の結果では判断しない |
+| Claude の最新の仕様に合わせて書く | Claude Code に最初から入っている、Claude の API を調べる機能（Skill の claude-api） | アプリが使っている機能を最新の機能一覧と照らし合わせ、README に書き漏れていた2つ（プロンプトキャッシュ、fallbacks）を見つけた |
 | 画面で実際に通す | Claude Code の組み込みのブラウザ | 問診、返事の検証、保存と再開を、本番ビルドで通した |
 | 作者の承認のもとで、改善の一覧を1件ずつ自動で実装させて確かめる | Long-running Agent Harness（Anthropic の記事「Effective harnesses for long-running agents」の型。改善の一覧を持ち、1件ずつ作り、テストで確かめてからコミットする）を、Claude Code の Subagent（作業用の別の場所 Git worktree で作らせる）、確かめ役の Subagent、コミット時の自動検査（Hooks）、ブラウザで画面を動かす自動の確認（Playwright の e2e テスト）で組んだ。全体を見張る Claude Code のセッション（司令役）は報告だけで判断せず、差分を読み、関門（テスト、ビルド、公開前の確認、e2e）を動かし直してから本流（main）に取り込む | 11/3 の深夜から 11/4 の午前に、最初の6件と作者が朝に足した3件の計9件を動かし、9件とも本流に取り込んだ。うち2件（返事に紛れた指示を画面で知らせる機能と、1つの質問で1つのことだけ聞く指示）は Claude への指示を1行ずつ足すもので、評価の結果（前者は4ケース12回で全指標100%、後者は9ケース27回で2つのことを一度に聞く質問が18問から0問になり、ほかの指標は下がらず）を見て作者が採用を決めた。単体テストは73件から115件に、ブラウザの自動の確認は0件から、Claude を呼ばない11件と、呼ぶものを含む14件になった。見つかった不具合は1件：用語がボタンになったことで Claude を呼ぶ確認が壊れていたのを、次の件の確認で見つけて直し、問診の画面を変えたときもこの確認を通す決まりにした。アプリが Claude を呼んだ費用は、記録できた分で約 $5.6（うち評価2回 $5.3。Claude Code 自体の分と、記録を取り損ねた3回は含まない）。詳しくは [DEVLOG.md](DEVLOG.md) |
 
@@ -180,7 +188,7 @@ Built with Claude: Japan 2026 の提出作品です（テーマ2「本来、誰�
 | 項目 | 内容 |
 | --- | --- |
 | アプリ | Next.js 16（TypeScript）、Vercel |
-| Claude | Claude Opus 5.5、Sonnet 5.5、Haiku 5.5（使い分けは上の「Claude の活用」）。公式 TypeScript SDK、`strict` なツール定義、Structured Outputs、画像の読み取り |
+| Claude | Claude Opus 5.5、Sonnet 5.5、Haiku 5.5（使い分けは上の「Claude の活用」）。公式 TypeScript SDK、`strict` なツール定義、Structured Outputs、画像の読み取り、adaptive thinking（考える量を Claude が決める。ことばの相談を除く）、ストリーミング（長い答えを途中で切らさずに受け取る）、プロンプトキャッシュ（問診のみ）、サーバー側の fallbacks（ことばの相談を除く） |
 | Excel | [read-excel-file](https://gitlab.com/catamphetamine/read-excel-file)（MIT License）をブラウザの中で使用 |
 | デザイン | [@digital-go-jp/tailwind-theme-plugin](https://github.com/digital-go-jp/tailwind-theme-plugin)（MIT License、Copyright (c) 2023 デジタル庁）の色、文字、角丸。部品は[デジタル庁デザインシステム](https://design.digital.go.jp/dads/)の説明を参考に、このプロジェクトで書いたもの |
 | 開発時の確認 | [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview)（事務職員役のエージェント）と [@playwright/mcp](https://github.com/microsoft/playwright-mcp)（Apache-2.0 License。ブラウザの操作）。アプリの動作には使わない |
