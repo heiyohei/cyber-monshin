@@ -567,6 +567,7 @@ export async function runInterview(
 
     calls += 1;
     usage.calls += 1;
+    if (message.usage.speed === "fast") usage.fastCalls += 1;
     usage.input += message.usage.input_tokens;
     usage.output += message.usage.output_tokens;
     usage.cacheRead += message.usage.cache_read_input_tokens ?? 0;

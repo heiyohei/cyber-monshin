@@ -55,10 +55,11 @@ export async function finalMessageFast(
 export const MAX_CALLS_PER_REQUEST = 6;
 export const MAX_BODY_LENGTH = 256_000;
 
-export type Usage = { calls: number; input: number; output: number; cacheRead: number; cacheWrite: number };
+// fastCalls は fast mode で返ってきた呼び出しの数（usage.speed）。ログで、公開サイトでも fast mode が効いているかを確かめる
+export type Usage = { calls: number; fastCalls: number; input: number; output: number; cacheRead: number; cacheWrite: number };
 
 export function emptyUsage(): Usage {
-  return { calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  return { calls: 0, fastCalls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 }
 
 export function apiErrorMessage(error: unknown): string {

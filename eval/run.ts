@@ -1,6 +1,8 @@
 // 問診と返事の検証を台本で動かして測る。費用がかかる。
-// 使い方：npm run eval -- --note "変更内容" [--case id] [--repeat 3] [--model claude-sonnet-5-5]
-// --model は、問診と返事の読み解きのモデルだけを差し替えて比べる（アプリの設定は変えない）
+// 使い方：npm run eval -- --note "変更内容" [--case id] [--repeat 3] [--model claude-sonnet-5-5] [--fast]
+// --model は、問診と返事の読み解きのモデルだけを差し替えて比べる（アプリの設定は変えない）。
+// fast mode は書く速さだけを変え、答えの中身は変わらない（公式の資料）ので、評価はふつうの速さで動かす（費用が半分）。
+// アプリと同じ fast mode で測るときは --fast を付ける
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { client, emptyUsage, type Usage } from "../src/lib/claude.ts";
@@ -25,6 +27,7 @@ const { values } = parseArgs({
     case: { type: "string", multiple: true },
     repeat: { type: "string", default: "3" },
     model: { type: "string", default: "claude-opus-5-5" },
+    fast: { type: "boolean", default: false },
   },
 });
 if (!values.note) throw new Error("--note で変更内容を指定してください");
@@ -36,20 +39,23 @@ const CONCURRENCY = 3;
 const MAX_ROUNDS = 8;
 // 100万トークンあたりの単価（claude-api の資料から）。キャッシュの書き込みは入力の1.25倍
 const PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
-  // アプリは Opus を fast mode で呼ぶので、Opus は2倍の単価（キャッシュの倍率も上に掛かる）
-  "claude-opus-5-5": { input: 8, output: 40, cacheRead: 0.4, cacheWrite: 10 },
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
   "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
   "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
 };
-const PRICE = PRICES[MODEL];
-if (!PRICE) throw new Error(`--model は ${Object.keys(PRICES).join("、")} のどれかにしてください`);
+const FAST = values.fast && MODEL === "claude-opus-5-5";
+if (values.fast && !FAST) throw new Error("--fast は claude-opus-5-5 だけで使えます");
+const BASE_PRICE = PRICES[MODEL];
+if (!BASE_PRICE) throw new Error(`--model は ${Object.keys(PRICES).join("、")} のどれかにしてください`);
+// fast mode は単価が2倍（キャッシュの倍率も上に掛かる）。ふつうの速さに切り替わった回も2倍で数える
+const PRICE = FAST ? Object.fromEntries(Object.entries(BASE_PRICE).map(([key, value]) => [key, value * 2])) as typeof BASE_PRICE : BASE_PRICE;
 
 // 問診（interview.ts）と返事の読み解き（vendor-reply.ts）の呼び出しのモデルを差し替える。
-// fast mode は Opus だけなので、ほかのモデルでは速さの指定を外す
+// --fast のときだけ、アプリと同じ速さの指定を残す（fast mode は Opus だけ）
 const stream = client.beta.messages.stream.bind(client.beta.messages);
 client.beta.messages.stream = ((params: Parameters<typeof stream>[0], options?: Parameters<typeof stream>[1]) => {
   const { speed, ...rest } = params;
-  return stream({ ...rest, model: MODEL, ...(MODEL === "claude-opus-5-5" ? { speed } : {}) }, options);
+  return stream({ ...rest, model: MODEL, ...(FAST ? { speed } : {}) }, options);
 }) as typeof client.beta.messages.stream;
 const RUNS_DIR = `eval/runs/${new Date().toISOString().replace(/[:.]/g, "-")}`;
 
@@ -368,6 +374,7 @@ const entry = {
   change: values.note,
   model: MODEL,
   effort: EFFORT,
+  speed: FAST ? "fast" : "standard",
   cases: cases.length,
   repeat,
   runs: runs.length,
