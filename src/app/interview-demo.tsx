@@ -23,6 +23,7 @@ import { detectPersonalInfo } from "@/lib/pii";
 import type { ReadResult } from "@/lib/quote";
 import type { ImageReading } from "@/lib/read-image";
 import { countSteps, remainingSteps, stepsCountNote } from "@/lib/result";
+import { FETCH_TIMEOUT_MS, LONG_WAIT_SECONDS, LONG_WAIT_TEXT, WAIT_TEXTS } from "@/lib/wait";
 import { buildSaveFile } from "@/lib/save-file";
 import type { InterviewSession, LastYearAnswer, SealedSession, VendorAnswer, VendorRequest } from "@/lib/session";
 
@@ -103,8 +104,46 @@ type PreparedImage = { dataUrl: string; data: string; width: number; height: num
 // 状態が同じで出どころだけ変わったときは same にし、矢印でなく「返事でも同じ」と示す
 type ReplyChange = { viewpointId: string; label: string; before: string; after: string; status: ViewpointStatus; same: boolean };
 
-// 通信が止まったときに、画面が「確認しています」のままにならないようにする
-const FETCH_TIMEOUT_MS = 90_000;
+// active になってからの秒数。待っている間、画面が止まっていないことを数字で示す（1秒ごとに変わる）
+function useElapsedSeconds(active: boolean): number {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const startedAt = Date.now();
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => {
+      clearInterval(timer);
+      setSeconds(0);
+    };
+  }, [active]);
+  return active ? seconds : 0;
+}
+
+// 回る輪。動きを減らす設定（prefers-reduced-motion）のときは回さず、止まった輪にする（待っている秒数の数字は変わる）
+function Spinner() {
+  return (
+    <span
+      aria-hidden="true"
+      data-spinner
+      className="mt-0.5 inline-block size-7 shrink-0 rounded-full border-4 border-blue-200 border-t-blue-900 motion-safe:animate-spin"
+    />
+  );
+}
+
+// 待っている間の表示（回る輪、案内の文、待っている秒数）。利用者が見ている場所（押したボタンのそば）に出す。
+// 読み上げは、各所の読み上げ用の領域（aria-live）が受け持つので、この部品は読み上げの領域にしない（同じ文を2回読ませない）
+function WaitPanel({ message, seconds }: { message: string; seconds: number }) {
+  return (
+    <div data-wait-panel="" className="flex items-start gap-3 rounded-8 border-2 border-blue-900 bg-blue-50 p-4">
+      <Spinner />
+      <div className="flex flex-col gap-1">
+        <p className="text-std-16B-170 text-blue-900">{message}</p>
+        <p className="text-std-16N-170 text-solid-gray-900">待っている時間：{seconds}秒</p>
+        {seconds >= LONG_WAIT_SECONDS && <p className="text-std-16N-170 text-solid-gray-900">{LONG_WAIT_TEXT}</p>}
+      </div>
+    </div>
+  );
+}
 
 // 写真や画面で答える。元のファイルは5MBまで、長い辺を 1568px に縮めた JPEG にして送る
 const IMAGE_MAX_FILE_BYTES = 5_000_000;
@@ -347,6 +386,14 @@ export function InterviewDemo({
   const [code, setCode] = useState("");
   // 待っている間の案内と、読み上げソフトに伝える短い文。どちらも常に置いた領域の文字だけを切り替える
   const [busyMessage, setBusyMessage] = useState("");
+  // 何を待っているか。問診と保存ファイルは左の列の上（質問があった場所）に、返事は「返事を確かめる」のすぐ下に、待ちの表示を出す
+  const [busyKind, setBusyKind] = useState<"interview" | "file" | "reply">("interview");
+  const busySeconds = useElapsedSeconds(busy);
+  const imageSeconds = useElapsedSeconds(imageBusy);
+  const termSeconds = useElapsedSeconds(termBusy);
+  // 左の列の上の待ちの表示。回答を送ると質問と回答欄が消えて画面が縮むので、ここが見える位置まで動かす
+  const waitRef = useRef<HTMLDivElement>(null);
+  const showTopWait = busy && busyKind !== "reply";
   const [live, setLive] = useState("");
   const [focusTarget, setFocusTarget] = useState<{ target: FocusTarget; seq: number } | null>(null);
   const questionRef = useRef<HTMLHeadingElement>(null);
@@ -409,6 +456,12 @@ export function InterviewDemo({
           : "start";
     top.scrollIntoView({ block });
   }, [focusTarget]);
+
+  // 回答を送ると、質問と回答欄が消えて画面が縮み、待ちの表示が画面の上の外に出ることがある。
+  // 待ち始めたら、待ちの表示が見える位置まで最小限だけ動かす（焦点は動かさない。読み上げは aria-live の領域が伝える）
+  useEffect(() => {
+    if (showTopWait) waitRef.current?.scrollIntoView({ block: "nearest" });
+  }, [showTopWait]);
 
   function handleEvent(event: ServerEvent) {
     if (event.type === "question") {
@@ -514,14 +567,15 @@ export function InterviewDemo({
     setRecent([]);
     setVerdictChange(null);
     setBusy(true);
+    setBusyKind("interview");
     // 回答のときは、何を送ったかを最初に示す（選択肢は押すとすぐ送るので、押した答えが送られたことが分かるように）。
     // この文は読み上げ用の領域（aria-live）にも出る
     setBusyMessage(
       body.answer
-        ? `「${sentPreview(body.answer)}」を送りました。回答を読み取っています。10〜20秒ほどかかります…`
+        ? `「${sentPreview(body.answer)}」を送りました。${WAIT_TEXTS.answer}`
         : body.item_id
-          ? "最初の質問を用意しています。10秒ほどかかります…"
-          : "続きを確かめています…",
+          ? WAIT_TEXTS.start
+          : WAIT_TEXTS.continue,
     );
     setError("");
     setQuestion(null);
@@ -708,7 +762,8 @@ export function InterviewDemo({
   async function sendSavedFile(text: string) {
     setError("");
     setBusy(true);
-    setBusyMessage("保存したファイルを確かめています…");
+    setBusyKind("file");
+    setBusyMessage(WAIT_TEXTS.file);
     try {
       const response = await postJson("/api/load-result", text);
       if (!response.ok) {
@@ -819,6 +874,8 @@ export function InterviewDemo({
     setWarning(null);
     setTermBusy(true);
     setError("");
+    // 「聞く」は押すと押せなくなるので、送ったことと待っていることを読み上げでも伝える
+    setLive(`ことばの相談を送りました。${WAIT_TEXTS.term}`);
     try {
       const response = await postJson("/api/ask-term", JSON.stringify({ session, question: termInput }));
       if (!response.ok) {
@@ -898,7 +955,7 @@ export function InterviewDemo({
     if (!session || !preparedImage || termBusy) return;
     setImageBusy(true);
     setError("");
-    setLive("写真を読み取っています。10秒ほどかかります…");
+    setLive(WAIT_TEXTS.image);
     try {
       const response = await postJson(
         "/api/read-image",
@@ -997,7 +1054,8 @@ export function InterviewDemo({
     if (!checked && needsPersonalInfoCheck(reply, "reply")) return;
     setWarning(null);
     setBusy(true);
-    setBusyMessage("返事を読み取っています。10秒ほどかかります…");
+    setBusyKind("reply");
+    setBusyMessage(WAIT_TEXTS.reply);
     setError("");
     // 同じ返事をもう一度確かめて結果が同じでも読み上げられるよう、いったん空にしてから入れる
     setLive("");
@@ -1141,12 +1199,25 @@ export function InterviewDemo({
           </p>
         )}
 
-        <p
-          aria-live="polite"
-          className={busy ? "rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4 text-std-16B-170 text-blue-900" : "sr-only"}
+        {/* 待っている間の案内。問診と保存ファイルでは、質問と回答欄があった場所（左の列の上）に、回る輪、案内の文、待っている秒数を出す。
+            案内の文の p は読み上げ用の領域（aria-live）なので、待っていないときも消さずに置き、見た目だけを切り替える。
+            返事のときは、見た目の表示は「返事を確かめる」のすぐ下に出し、ここは読み上げだけにする。
+            長く待つと、案内の文にいつもより長いことを足す（読み上げでも1回だけ伝わる） */}
+        <div
+          ref={waitRef}
+          data-wait-panel={showTopWait ? "" : undefined}
+          className={
+            showTopWait ? "flex scroll-mt-4 items-start gap-3 rounded-8 border-2 border-blue-900 bg-blue-50 p-4" : "sr-only"
+          }
         >
-          {busy ? busyMessage : ""}
-        </p>
+          {showTopWait && <Spinner />}
+          <div className={showTopWait ? "flex flex-col gap-1" : undefined}>
+            <p aria-live="polite" className={showTopWait ? "text-std-18B-160 text-blue-900" : "sr-only"}>
+              {busy ? `${busyMessage}${busySeconds >= LONG_WAIT_SECONDS ? LONG_WAIT_TEXT : ""}` : ""}
+            </p>
+            {showTopWait && <p className="text-std-16N-170 text-solid-gray-900">待っている時間：{busySeconds}秒</p>}
+          </div>
+        </div>
         <p aria-live="polite" className="sr-only">
           {live}
         </p>
@@ -1616,7 +1687,7 @@ export function InterviewDemo({
                           選び直す
                         </button>
                       </div>
-                      {imageBusy && <p className="text-solid-gray-800">写真を読み取っています。10秒ほどかかります…</p>}
+                      {imageBusy && <WaitPanel message={WAIT_TEXTS.image} seconds={imageSeconds} />}
                     </div>
                   )}
                   {imageReading && (
@@ -1762,6 +1833,7 @@ export function InterviewDemo({
             >
               {termBusy ? "調べています…" : "聞く"}
             </button>
+            {termBusy && <WaitPanel message={WAIT_TEXTS.term} seconds={termSeconds} />}
           </form>
         )}
 
@@ -1977,6 +2049,8 @@ export function InterviewDemo({
                 <button type="submit" disabled={busy || !reply.trim()} className={buttonClass}>
                   返事を確かめる
                 </button>
+                {/* 返事を読み取っている間の表示は、押したボタンのすぐ下に出す（左の列の上は見えない位置にあるため）。読み上げは上の領域が伝える */}
+                {busy && busyKind === "reply" && <WaitPanel message={busyMessage} seconds={busySeconds} />}
               </form>
             )}
             {/* form の中に form は置けないので、返事の欄の form のすぐ外（「返事を確かめる」の直後）に出す */}
