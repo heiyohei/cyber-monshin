@@ -19,6 +19,17 @@
   box-shadow: 0 0 0 2px var(--color-yellow-300);
 }
 
+/* 合言葉の欄が出たときに、一度だけ背景を黄色から青に変えて、欄が出たことに気づけるようにする。
+   動きを減らす設定のときは使わない（motion-safe で付ける） */
+@keyframes code-appear {
+  from {
+    background-color: var(--color-yellow-100);
+  }
+  to {
+    background-color: var(--color-blue-50);
+  }
+}
+
 /* 印刷では説明用の1枚だけを出す。画面の部品は print:hidden で消し、高さが残って白紙が続かないようにする */
 @media print {
   @page {

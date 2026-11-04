@@ -1130,13 +1130,29 @@ export function InterviewDemo({
   }
 
   // 合言葉の欄。押したボタンのすぐ下（codeAt の場所）に1つだけ出す。案内の文は欄の説明にして、焦点が来たときに読み上げる
+  // 合言葉の欄の見出し。欄は押したボタンのすぐ下に出るので、見出しで「合言葉が要るので止まっている」ことを、押したボタンの続きとして示す
+  // （事務職員役が、欄が出ても何も起きなかったように見えたと言ったため）。見出しの順位は、欄が入る場所に合わせる
+  const CodeHeading = codeAt === "other" ? "h2" : "h4";
+  // 合言葉を確かめたあとにどうなるか。自動で続けるのは、送る中身を書き直せない操作（サンプルで始める、選んだ保存ファイルを読む）だけ
+  const codeAfter =
+    codeAt === "sample"
+      ? "合言葉を確かめると、そのままサンプルの問診が始まります。"
+      : codeAt === "resume"
+        ? "合言葉を確かめると、選んだファイルをそのまま読み込みます。"
+        : "合言葉を確かめたあと、先ほど押したボタンを、もう一度押してください。";
   const codeForm = (
     <form
       onSubmit={submitCode}
       aria-label="合言葉の確認"
-      className="flex flex-col gap-2 rounded-8 border-2 border-blue-900 bg-white p-4"
+      data-code-form=""
+      className="flex flex-col gap-2 rounded-8 border-2 border-l-8 border-blue-900 bg-blue-50 p-4 motion-safe:animate-[code-appear_1.2s_ease-out]"
     >
-      <p className="text-std-16N-170 text-solid-gray-800">このアプリは、いまは合言葉を知っている方だけが使えます。</p>
+      <CodeHeading id="access-code-heading" className="text-std-20B-150 text-blue-900">
+        合言葉が必要です
+      </CodeHeading>
+      <p id="access-code-after" className="text-std-16N-170 text-solid-gray-900">
+        このアプリは、いまは合言葉を知っている方だけが使えます。{codeAfter}
+      </p>
       <p
         id="access-code-message"
         className={`text-std-16B-170 ${codeMessage.wrong ? "text-error-1" : "text-solid-gray-900"}`}
@@ -1151,7 +1167,7 @@ export function InterviewDemo({
         ref={codeRef}
         type="password"
         autoComplete="off"
-        aria-describedby="access-code-message"
+        aria-describedby="access-code-message access-code-after"
         value={code}
         onChange={(event) => setCode(event.target.value)}
         className={fieldClass}

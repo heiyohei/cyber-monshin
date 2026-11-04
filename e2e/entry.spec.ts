@@ -99,6 +99,21 @@ test("合言葉：「サンプルで試す」のあとに要るときは、押�
   // 押したボタンも、欄も、見えている範囲にある（画面の上へ飛ばない）
   await expect(sample).toBeInViewport();
   await expect(form.getByRole("button", { name: "合言葉を確かめる" })).toBeInViewport();
+  // 欄が出たことに気づけるように（2周目）：欄は押したボタンの次の要素で、欄の先頭は見出し（始め方の見出し h3 の下なので h4）。
+  // 欄の全体が見えている範囲に入る。焦点が来たときに、確かめたあとどうなるかの文も読み上げる
+  await expect(sample.locator("xpath=following-sibling::*[1]")).toHaveAttribute("data-code-form", "");
+  const heading = form.getByRole("heading", { level: 4 });
+  await expect(heading).toHaveCount(1);
+  await expect(form.locator("xpath=./*[1]")).toHaveAttribute("id", "access-code-heading");
+  await expect(form).toBeInViewport({ ratio: 1 });
+  const describedBy = (await input.getAttribute("aria-describedby"))?.split(" ") ?? [];
+  expect(describedBy).toEqual(["access-code-message", "access-code-after"]);
+  await expect(form.locator("#access-code-after")).not.toBeEmpty();
+  // 出たときに一度だけ背景の色を変える。動きを減らす設定のときは変えない
+  expect(await form.evaluate((element) => getComputedStyle(element).animationName)).toBe("code-appear");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect.poll(() => form.evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
 
   // 違うときは、同じ欄に知らせが出て、欄は残る
   await input.fill("ちがう");

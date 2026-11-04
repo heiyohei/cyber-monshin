@@ -132,6 +132,9 @@ test("選択肢：回答のときに合言葉が要ると、欄が出て、確�
 
   const codeForm = page.getByRole("form", { name: "合言葉の確認" });
   await expect(codeForm.getByLabel(/^合言葉/)).toBeFocused();
+  // 問診の途中は左の列の上に出るので、欄の見出しは h2。欄の全体が見えている範囲に入る
+  await expect(codeForm.getByRole("heading", { level: 2 })).toHaveCount(1);
+  await expect(codeForm).toBeInViewport({ ratio: 1 });
   await codeForm.getByLabel(/^合言葉/).fill("せいかい");
   await codeForm.getByRole("button", { name: "合言葉を確かめる" }).click();
   const notice = page.getByText("合言葉を確かめました。先ほど押したボタンを、もう一度押してください。");
