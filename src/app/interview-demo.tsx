@@ -83,6 +83,9 @@ type TermExchange = { question: string; answer: string };
 type RecentReading = HistoryReading;
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
 type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code" | "excel" | "term" | "steps";
+// 合言葉の欄を出す場所。入口の3つの始め方と返事の欄は、押したボタンのすぐ下に出す。
+// 問診の途中（回答、ことばの相談、写真）は、質問のすぐ上（左の列の上）に出す
+type CodeSpot = "sample" | "excel" | "resume" | "reply" | "other";
 // 送る前に、この画面の中で縮めた写真。dataUrl は表示に、data（base64）は送信に使う
 type PreparedImage = { dataUrl: string; data: string; width: number; height: number };
 // 返事の検証で状態か確認の出どころが変わった観点。結果の下に出して、何が変わったかを示す
@@ -248,8 +251,17 @@ function verdictNote(card: Card, started: boolean): string {
   }
 }
 
-// notice は、保証しないことやデータの扱いの注意書き。問診が始まったらたたんで、質問を上に出す
-export function InterviewDemo({ initialCard, notice }: { initialCard: Card; notice: ReactNode }) {
+// notice は、保証しないことやデータの扱いの注意書き（くわしい5項目）。入口でも問診中でもたたんで、始め方や質問を上に出す。
+// noticeLead は、たたんでも常に見せる短い文（公開するときの表示と、患者さんの情報を入力しないこと）
+export function InterviewDemo({
+  initialCard,
+  notice,
+  noticeLead,
+}: {
+  initialCard: Card;
+  notice: ReactNode;
+  noticeLead: ReactNode;
+}) {
   const [card, setCard] = useState(initialCard);
   const [itemId, setItemId] = useState(initialCard.itemId);
   const item: FocusItem = getItem(itemId) ?? ITEMS[0];
@@ -311,7 +323,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const excelCurrent = excel?.find((reading) => reading.itemId === item.id) ?? null;
   // 「やった」印を、最後に保存（または読み込み）してから変えたか。順番は問わない
   const doneChanged = done.length !== savedDone.length || done.some((id) => !savedDone.includes(id));
-  const [needsCode, setNeedsCode] = useState(false);
+  // 合言葉の欄を出す場所。押したボタンの近くに出し、画面の上へ飛ばさない。null なら出さない
+  const [codeAt, setCodeAt] = useState<CodeSpot | null>(null);
+  // 合言葉の欄の上に出す文（まだ確かめていない、違う、など）と、それが誤りの知らせかどうか
+  const [codeMessage, setCodeMessage] = useState<{ text: string; wrong: boolean }>({ text: "", wrong: false });
   const [code, setCode] = useState("");
   // 待っている間の案内と、読み上げソフトに伝える短い文。どちらも常に置いた領域の文字だけを切り替える
   const [busyMessage, setBusyMessage] = useState("");
@@ -362,9 +377,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     element.focus({ preventScroll: true });
     // 次の質問の上には「直前の回答から読み取ったこと」が出るので、あればそこから見せる
     const top = focusTarget.target === "question" ? (recentRef.current ?? element) : element;
-    // Excel の一覧の行から選んだとき、ことばの相談の欄へ移すとき、「次にすること」へ戻すときは、周りが見えたまま最小限だけ動かす
+    // Excel の一覧の行から選んだとき、ことばの相談の欄へ移すとき、「次にすること」へ戻すときは、周りが見えたまま最小限だけ動かす。
+    // 合言葉の欄は押したボタンのすぐ下に出るので、真ん中に置いて、押したボタンも見えたままにする
     const block =
-      focusTarget.target === "error"
+      focusTarget.target === "error" || focusTarget.target === "code"
         ? "center"
         : focusTarget.target === "excel" || focusTarget.target === "term" || focusTarget.target === "steps"
           ? "nearest"
@@ -418,15 +434,21 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     requestFocus("error");
   }
 
-  async function failFrom(response: Response, retry?: () => void) {
+  // spot は合言葉の欄を出す場所（押したボタンの近く）
+  async function failFrom(response: Response, retry?: () => void, spot: CodeSpot = "other") {
     const data = await response.json().catch(() => null);
-    showError(data?.error ?? "処理に失敗しました。もう一度ボタンを押してください。");
-    // 合言葉の欄は押したあとに出るので、見落とさないよう焦点を欄へ移す。確かめたら止まった操作を続ける
+    const message: string = data?.error ?? "処理に失敗しました。もう一度ボタンを押してください。";
+    // 合言葉がまだのときは、画面の上のエラーではなく、押したボタンのすぐ下に合言葉の欄と案内の文を出し、焦点を欄へ移す。
+    // 確かめたら止まった操作を続ける
     if (response.status === 401) {
+      setError("");
       retryRef.current = retry ?? null;
-      setNeedsCode(true);
+      setCodeMessage({ text: message, wrong: false });
+      setCodeAt(spot);
       requestFocus("code");
+      return;
     }
+    showError(message);
   }
 
   function postJson(path: string, body: BodyInit) {
@@ -442,13 +464,16 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   const CONNECTION_ERROR = "接続できないか、時間がかかりすぎました。もう一度ボタンを押してください。";
 
   // 署名つきの状態が届いたときだけ成功とする。失敗したら画面を送信前に戻し、やり直せるようにする
-  async function sendInterview(body: {
-    session?: SealedSession | null;
-    answer?: string;
-    item_id?: string;
-    last_year_answer?: LastYearAnswer;
-    vendor_answer?: VendorAnswer;
-  }) {
+  async function sendInterview(
+    body: {
+      session?: SealedSession | null;
+      answer?: string;
+      item_id?: string;
+      last_year_answer?: LastYearAnswer;
+      vendor_answer?: VendorAnswer;
+    },
+    spot: CodeSpot = "other",
+  ) {
     const before = { question, card, reasons, recent, verdictChange, history };
     let received = false;
     let failed = false;
@@ -473,7 +498,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     try {
       const response = await postJson("/api/interview", JSON.stringify(body));
       if (!response.ok || !response.body) {
-        await failFrom(response, () => void sendInterview(body));
+        await failFrom(response, () => void sendInterview(body, spot), spot);
         failed = true;
         return false;
       }
@@ -549,14 +574,16 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     return true;
   }
 
+  // spot は、合言葉が要るときに欄を出す場所（押したボタンのすぐ下）
   function start(
+    spot: CodeSpot,
     lastYearAnswer: LastYearAnswer = item.sample.lastYearAnswer,
     vendorAnswer: VendorAnswer = item.sample.vendorAnswer,
   ) {
     setCard(buildCard(item, initialStates(item), lastYearAnswer));
     setDone([]);
     setSavedDone([]);
-    return sendInterview({ item_id: item.id, last_year_answer: lastYearAnswer, vendor_answer: vendorAnswer });
+    return sendInterview({ item_id: item.id, last_year_answer: lastYearAnswer, vendor_answer: vendorAnswer }, spot);
   }
 
   // 次にすることの「やった」印を付けたり外したりする。残っている件数を読み上げ用の領域に出す。
@@ -628,13 +655,26 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setError("このアプリで保存したファイルを選んでください。");
       return;
     }
+    let text: string;
+    try {
+      text = await selected.text();
+    } catch {
+      setError("このアプリで保存したファイルを選んでください。");
+      return;
+    }
+    await sendSavedFile(text);
+  }
+
+  // 保存ファイルの中身をサーバーで確かめて、結果の画面にする。合言葉で止まったときは、確かめたあとに同じ中身で続ける
+  // （ファイルを選び直さなくて済むように）
+  async function sendSavedFile(text: string) {
+    setError("");
     setBusy(true);
     setBusyMessage("保存したファイルを確かめています…");
     try {
-      const text = await selected.text();
       const response = await postJson("/api/load-result", text);
       if (!response.ok) {
-        await failFrom(response);
+        await failFrom(response, () => void sendSavedFile(text), "resume");
         return;
       }
       const data = await response.json();
@@ -846,16 +886,32 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
   async function submitCode(event: FormEvent) {
     event.preventDefault();
     setError("");
-    const response = await fetch("/api/access", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-    if (!response.ok) {
-      await failFrom(response);
+    // 違っていたときも、欄は同じ場所に残し、止まった操作も覚えたままにする（正しい合言葉で続けられるように）
+    let response: Response;
+    try {
+      response = await fetch("/api/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch {
+      setCodeMessage({ text: CONNECTION_ERROR, wrong: true });
+      setLive(CONNECTION_ERROR);
+      requestFocus("code");
       return;
     }
-    setNeedsCode(false);
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      const text: string = data?.error ?? "合言葉を確かめられませんでした。もう一度「確かめる」を押してください。";
+      setCodeMessage({ text, wrong: true });
+      // 焦点は欄にあるままなので、変わった文を読み上げ用の領域にも入れる
+      setLive(text);
+      requestFocus("code");
+      return;
+    }
+    setCodeAt(null);
+    setCodeMessage({ text: "", wrong: false });
     setCode("");
     const retry = retryRef.current;
     retryRef.current = null;
@@ -885,7 +941,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     try {
       const response = await postJson("/api/verify-reply", JSON.stringify({ session, reply }));
       if (!response.ok) {
-        await failFrom(response, () => void sendReply(true));
+        await failFrom(response, () => void sendReply(true), "reply");
         return;
       }
       const data = await response.json();
@@ -952,54 +1008,50 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
     }
   }
 
+  // 合言葉の欄。押したボタンのすぐ下（codeAt の場所）に1つだけ出す。案内の文は欄の説明にして、焦点が来たときに読み上げる
+  const codeForm = (
+    <form
+      onSubmit={submitCode}
+      aria-label="合言葉の確認"
+      className="flex flex-col gap-2 rounded-8 border-2 border-blue-900 bg-white p-4"
+    >
+      <p
+        id="access-code-message"
+        className={`text-std-16B-170 ${codeMessage.wrong ? "text-error-1" : "text-solid-gray-900"}`}
+      >
+        {codeMessage.text}
+      </p>
+      <label htmlFor="access-code" className={labelClass}>
+        合言葉（このアプリを案内した人に聞いてください）
+      </label>
+      <input
+        id="access-code"
+        ref={codeRef}
+        type="password"
+        autoComplete="off"
+        aria-describedby="access-code-message"
+        value={code}
+        onChange={(event) => setCode(event.target.value)}
+        className={fieldClass}
+      />
+      <button type="submit" disabled={!code} className={buttonClass}>
+        確かめる
+      </button>
+    </form>
+  );
+
   return (
     <div className="grid gap-8 lg:grid-cols-2">
-      <div className="flex flex-col gap-6 lg:col-span-2 print:hidden">
-        {session ? (
-          <details className="rounded-8 bg-solid-gray-50 px-4 py-3 text-std-16N-170 text-solid-gray-800">
-            <summary className="cursor-pointer text-std-16B-170 focus-visible:focus-ring">
-              このアプリについて（保証しないこと、入力してはいけないこと、データの扱い）
-            </summary>
-            <div className="mt-2">{notice}</div>
-          </details>
-        ) : (
-          notice
-        )}
-        {!session && (
-          // 全幅に置くと流れが1行に収まり、下の「サンプルで試す」が最初の画面に近づく。くわしい説明はたたむ
-          <section
-            className="flex flex-col gap-2 rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4"
-            aria-labelledby="guide-heading"
-          >
-            <h2 id="guide-heading" className="text-std-20B-150 text-blue-900">
-              使い方の流れ
-            </h2>
-            <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-std-16N-170">
-              {["対策を選ぶ", "始め方を選ぶ", "質問に答える", "まとめを見る", "質問文を送って保存する", "返事を確かめる"].map(
-                (step, index, steps) => (
-                  <li key={step} className="flex items-center gap-2">
-                    <span className="text-std-16B-170">{step}</span>
-                    {index < steps.length - 1 && <span aria-hidden="true">→</span>}
-                  </li>
-                ),
-              )}
-            </ol>
-            <details>
-              <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">くわしい流れを見る</summary>
-              <ol className="mt-2 flex list-decimal flex-col gap-1 pl-6 text-std-16N-170">
-                <li>確かめる対策を1つ選びます（下の 1）。初めてなら、そのままで構いません</li>
-                <li>始め方を1つ選びます（下の 2）。まず試すだけなら「サンプルで試す」です</li>
-                <li>質問に答えます（5問まで）。答えるたびに、判定カードが変わります</li>
-                <li>問診のまとめと、診療が止まるおそれがあるところ、次にすることを見ます。説明用の1枚を印刷できます</li>
-                <li>質問文をコピーして、メールなどでベンダーに送ります。「続きを再開するためのファイル」も保存します</li>
-                <li>返事が届いたら、そのファイルを読み込んで、返事を確かめます</li>
-              </ol>
-              <p className="mt-2 text-std-16N-170 text-solid-gray-800">
-                5と6は、診療が止まるおそれがあるところが見つかったときだけです。
-              </p>
-            </details>
-          </section>
-        )}
+      {/* 注意書きは、入口でも問診中でも同じ形にする。大事な表示（noticeLead）は開かなくても読め、くわしい5項目はたたむ。
+          入口では、たたむことで「サンプルで試す」が最初の画面に入る */}
+      <div className="flex flex-col gap-1 rounded-8 bg-solid-gray-50 px-4 py-3 text-std-16N-170 text-solid-gray-800 lg:col-span-2 print:hidden">
+        {noticeLead}
+        <details>
+          <summary className="cursor-pointer text-std-16B-170 text-blue-900 underline focus-visible:focus-ring">
+            このアプリについて（保証しないこと、入力してはいけないこと、データの扱い）
+          </summary>
+          <div className="mt-2">{notice}</div>
+        </details>
       </div>
 
       <section className="flex flex-col gap-6 print:hidden" aria-label="問診とベンダーの返事">
@@ -1028,24 +1080,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           <p className="rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4 text-std-16B-170 text-blue-900">{codeNotice}</p>
         )}
 
-        {needsCode && (
-          <form onSubmit={submitCode} className="flex flex-col gap-2">
-            <label htmlFor="access-code" className={labelClass}>
-              合言葉（このアプリを案内した人に聞いてください）
-            </label>
-            <input
-              id="access-code"
-              ref={codeRef}
-              type="password"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              className={fieldClass}
-            />
-            <button type="submit" disabled={!code} className={buttonClass}>
-              確かめる
-            </button>
-          </form>
-        )}
+        {codeAt === "other" && codeForm}
 
         {!session && !busy && (
           <div className="flex flex-col gap-6">
@@ -1106,17 +1141,21 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               </h2>
               <p className="text-std-16N-170">次の3つのうち、自分に合うものを1つ選んで進めます。</p>
               <section className={`flex flex-col gap-3 ${panelClass}`}>
+                {/* 見出しはボタンと同じ言葉にしない（同じ言葉が2回続くと、どちらを押すのか迷うため） */}
                 <h3 id="start-sample" className="text-std-18B-160 text-solid-gray-900">
-                  サンプルで試す
+                  架空の病院で試す
                 </h3>
-                <p className="text-std-16B-170">まず使い方を試したい方（架空の病院で試します）</p>
+                <p className="text-std-16B-170">まず使い方を試したい方</p>
+                {/* ボタンを最初の画面に入れるため、架空の病院の説明はボタンの下に置く（押す前に読む必要がある操作の説明ではないため）。
+                    Excel は「2つを一緒に選ぶ」を選ぶ前に読む必要があるので、説明をボタンの上に残す */}
+                <button type="button" onClick={() => start("sample")} className={buttonClass}>
+                  サンプルで試す
+                </button>
+                {codeAt === "sample" && codeForm}
                 <p className="text-std-16N-170">
                   {SAMPLE_HOSPITAL.name}の担当者になったつもりで、質問に答えてみてください。
                   {sampleDescription(item)}
                 </p>
-                <button type="button" onClick={() => start()} className={buttonClass}>
-                  サンプルで試す
-                </button>
                 <p className="text-std-16N-170 text-solid-gray-800">
                   実際の病院の情報は入れないでください。回答はこの画面を閉じると消えます。
                 </p>
@@ -1270,9 +1309,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                         </select>
                       </>
                     )}
-                    <button type="button" onClick={() => start(excelAnswer, excelVendor)} className={buttonClass}>
+                    <button type="button" onClick={() => start("excel", excelAnswer, excelVendor)} className={buttonClass}>
                       この回答で問診を始める
                     </button>
+                    {codeAt === "excel" && codeForm}
                   </div>
                 )}
               </section>
@@ -1288,7 +1328,41 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                   続きを再開するためのファイルを読み込む
                   <input type="file" accept="application/json,.json" onChange={loadResult} className="sr-only" />
                 </label>
+                {codeAt === "resume" && codeForm}
               </section>
+            </section>
+            {/* 使い方の流れは、始め方のあとに置く。始め方を最初の画面に入れるため（前置きは読まれにくい）。くわしい説明はたたむ */}
+            <section
+              className="flex flex-col gap-2 rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4"
+              aria-labelledby="guide-heading"
+            >
+              <h2 id="guide-heading" className="text-std-20B-150 text-blue-900">
+                使い方の流れ
+              </h2>
+              <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-std-16N-170">
+                {["対策を選ぶ", "始め方を選ぶ", "質問に答える", "まとめを見る", "質問文を送って保存する", "返事を確かめる"].map(
+                  (step, index, steps) => (
+                    <li key={step} className="flex items-center gap-2">
+                      <span className="text-std-16B-170">{step}</span>
+                      {index < steps.length - 1 && <span aria-hidden="true">→</span>}
+                    </li>
+                  ),
+                )}
+              </ol>
+              <details>
+                <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">くわしい流れを見る</summary>
+                <ol className="mt-2 flex list-decimal flex-col gap-1 pl-6 text-std-16N-170">
+                  <li>確かめる対策を1つ選びます（上の 1）。初めてなら、そのままで構いません</li>
+                  <li>始め方を1つ選びます（上の 2）。まず試すだけなら「サンプルで試す」です</li>
+                  <li>質問に答えます（5問まで）。答えるたびに、判定カードが変わります</li>
+                  <li>問診のまとめと、診療が止まるおそれがあるところ、次にすることを見ます。説明用の1枚を印刷できます</li>
+                  <li>質問文をコピーして、メールなどでベンダーに送ります。「続きを再開するためのファイル」も保存します</li>
+                  <li>返事が届いたら、そのファイルを読み込んで、返事を確かめます</li>
+                </ol>
+                <p className="mt-2 text-std-16N-170 text-solid-gray-800">
+                  5と6は、診療が止まるおそれがあるところが見つかったときだけです。
+                </p>
+              </details>
             </section>
           </div>
         )}
@@ -1803,6 +1877,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 </button>
               </form>
             )}
+            {/* form の中に form は置けないので、返事の欄の form のすぐ外（「返事を確かめる」の直後）に出す */}
+            {vendor && codeAt === "reply" && codeForm}
 
             {results.length > 0 && (
               <div className="flex flex-col gap-3">

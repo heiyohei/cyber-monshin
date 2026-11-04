@@ -21,10 +21,18 @@ export default function Home() {
         </p>
       </header>
 
+      {/* 公開するときの表示（SPEC 第12章：保証しない、公式でない、架空）と、患者さんの情報を入力しないことは、
+          たたんだ注意書きを開かなくても読めるよう、noticeLead の短い文で常に出す。くわしい5項目は notice に残す */}
       <InterviewDemo
         initialCard={buildCard(item, initialStates(item), item.sample.lastYearAnswer)}
+        noticeLead={
+          <p className="text-std-16N-170 text-solid-gray-800">
+            <strong className="text-std-16B-170 text-solid-gray-900">患者さんの情報は入力しないでください。</strong>
+            対策が基準を満たしていると保証するものではなく、法的な判断もしません。厚生労働省の公式ツールではありません。黒戸（くろうど）記念病院と黒戸町は架空です。
+          </p>
+        }
         notice={
-          <ul className="list-disc space-y-1 rounded-8 bg-solid-gray-50 py-4 pr-4 pl-9 text-std-16N-170 text-solid-gray-800">
+          <ul className="list-disc space-y-1 pl-5 text-std-16N-170 text-solid-gray-800">
             <li>
               患者さんの情報など、他人に知られてはいけない情報は入力しないでください。回答はこのサイトに保存しませんが、処理のため
               AI（Anthropic 社の Claude）へ送ります。
