@@ -1,6 +1,6 @@
-// 問診の待ち時間を区間ごとに測る。費用がかかる（1回の問診で約 $0.05）。
-// 使い方：npm run eval:perf -- [--runs 3] [--rounds 4] [--item backup] [--fast] [--model claude-sonnet-5-5]
-// --fast は fast mode（研究段階の機能。料金は2倍）で同じ流れを測る。--model は別のモデルで速さだけを測る（質は npm run eval で比べる）
+// 問診の待ち時間を区間ごとに測る。費用がかかる（5場面の問診1回で、fast mode の Opus は約 $0.2）。
+// 使い方：npm run eval:perf -- [--runs 3] [--rounds 4] [--item backup] [--standard] [--model claude-sonnet-5-5]
+// アプリは Opus を fast mode で呼ぶ。--standard はふつうの速さで測る。--model は別のモデルで速さだけを測る（質は npm run eval で比べる。fast mode は Opus だけ）
 // 区間：応答の始まりまで（通信と入力の読み込み）、考える時間（最初の出力のブロックまで）、書く時間（最後まで）、コードの処理
 import { parseArgs } from "node:util";
 import { client, emptyUsage } from "../src/lib/claude.ts";
@@ -26,7 +26,7 @@ const { values } = parseArgs({
     runs: { type: "string", default: "3" },
     rounds: { type: "string", default: "4" },
     item: { type: "string", default: "backup" },
-    fast: { type: "boolean", default: false },
+    standard: { type: "boolean", default: false },
     model: { type: "string" },
   },
 });
@@ -44,10 +44,9 @@ let currentRound = 0;
 // 呼び出しの流れの出来事に時刻を付ける。中身（回答や質問の文）は記録しない
 const original = client.beta.messages.stream.bind(client.beta.messages);
 client.beta.messages.stream = ((params: Parameters<typeof original>[0], options?: Parameters<typeof original>[1]) => {
-  const model = values.model ? { ...params, model: values.model } : params;
-  const request = values.fast
-    ? { ...model, speed: "fast", betas: [...(model.betas ?? []), "fast-mode-2026-02-01"] }
-    : model;
+  const { speed, ...rest } = params;
+  const model = values.model ?? params.model;
+  const request = { ...rest, model, ...(model === "claude-opus-5-5" && !values.standard ? { speed } : {}) };
   const stream = original(request as typeof params, options);
   const t0 = performance.now();
   let started = 0;
@@ -78,7 +77,7 @@ client.beta.messages.stream = ((params: Parameters<typeof original>[0], options?
       thinkMs: first - start,
       writeMs: end - first,
       totalMs: end - t0,
-      blocks,
+      blocks: [...blocks, `speed=${message.usage.speed ?? "-"}`],
       output: message.usage.output_tokens,
       input: message.usage.input_tokens,
       cacheRead: message.usage.cache_read_input_tokens ?? 0,
@@ -136,7 +135,7 @@ for (const round of rounds) {
 const avg = (pick: (call: Call) => number) => sec(calls.reduce((sum, call) => sum + pick(call), 0) / calls.length);
 console.log(`\n平均（呼び出し1回）：始まりまで ${avg((c) => c.startMs)}、考える ${avg((c) => c.thinkMs)}、書く ${avg((c) => c.writeMs)}、合計 ${avg((c) => c.totalMs)}`);
 const cost =
-  (values.fast ? 2 : 1) *
+  (!values.model?.includes("sonnet") && !values.model?.includes("haiku") && !values.standard ? 2 : 1) *
   (usage.input * PRICE.input + usage.output * PRICE.output + usage.cacheRead * PRICE.cacheRead + usage.cacheWrite * PRICE.cacheWrite) /
   1_000_000;
 console.log(`呼び出し ${usage.calls}回、費用 約 $${cost.toFixed(3)}（単価からの計算）`);

@@ -231,8 +231,8 @@ Built with Claude: Japan 2026 の提出作品。テーマ2「本来、誰にで�
 
 | 役割 | 方針 |
 | --- | --- |
-| 問診の判断 | Claude Opus 5.5（effort `medium`）。精度を優先する |
-| ベンダーの返事の要件検証 | Claude Opus 5.5（effort `medium`）。Claude Sonnet 5.5 との比較はまだしていない |
+| 問診の判断 | Claude Opus 5.5（effort `medium`、fast mode）。精度を優先する。Sonnet 5.5、Haiku 5.5 と9ケースで比べ、判定の一致は Opus と Sonnet が100%、Haiku が96.3%。Sonnet は状態の揺れと出し直しがあった |
+| ベンダーの返事の要件検証 | Claude Opus 5.5（effort `medium`、fast mode）。問診と同じ比較で、返事の要件の読み取りは Opus 91.7%、Sonnet 100%、Haiku 83.3%（1回ずつ） |
 | 写真や画面の読み取り | Claude Sonnet 5.5（effort `low`）。Opus 5.5 と同じ画像で比べ、読み取りが同じで費用が約半分だった |
 | ことばの相談 | Claude Haiku 5.5（effort `low`） |
 

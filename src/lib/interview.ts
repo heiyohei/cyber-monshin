@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { FocusItem } from "../data/types.ts";
 import { buildCard, type Card } from "./card.ts";
-import { CLAUDE_PARAMS, client, MAX_CALLS_PER_REQUEST, type Usage } from "./claude.ts";
+import { CLAUDE_PARAMS, client, finalMessageFast, MAX_CALLS_PER_REQUEST, type Usage } from "./claude.ts";
 import { quoteExists } from "./quote.ts";
 import { itemOf, vendorRequestFor, type InterviewSession, type VendorRequest } from "./session.ts";
 import { computeVerdict, type ViewpointStatus } from "./verdict.ts";
@@ -536,31 +536,34 @@ export async function runInterview(
   let calls = 0;
   while (calls < MAX_CALLS_PER_REQUEST) {
     emit({ type: "thinking" });
-    const stream = client.beta.messages.stream(
-      {
-        ...CLAUDE_PARAMS,
-        betas: [...CLAUDE_PARAMS.betas],
-        output_config: { effort: "medium" },
-        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-        tools: toolsFor(itemOf(session)),
-        tool_choice: { type: "auto" },
-        messages: session.messages,
-      },
-      { signal },
-    );
     // 書き終えたブロックは、次のブロックが始まってから処理する。上限（max_tokens）で切れるのは最後のブロックなので、
     // 書きかけのブロックは途中で処理しない。最後のブロックは、止まった理由を確かめたあとに processToolUses で処理する
     const early = new Map<string, ToolResult>();
-    let held: ToolUse | null = null;
-    stream.on("contentBlock", (block) => {
-      held = block.type === "tool_use" && !isFinalTool(block) ? block : null;
+    const message = await finalMessageFast("interview", (speed, options) => {
+      const stream = client.beta.messages.stream(
+        {
+          ...CLAUDE_PARAMS,
+          betas: [...CLAUDE_PARAMS.betas],
+          speed,
+          output_config: { effort: "medium" },
+          system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+          tools: toolsFor(itemOf(session)),
+          tool_choice: { type: "auto" },
+          messages: session.messages,
+        },
+        { signal, ...options },
+      );
+      let held: ToolUse | null = null;
+      stream.on("contentBlock", (block) => {
+        held = block.type === "tool_use" && !isFinalTool(block) ? block : null;
+      });
+      stream.on("streamEvent", (event) => {
+        if (event.type !== "content_block_start" || !held) return;
+        early.set(held.id, processEarly(held, session, emit));
+        held = null;
+      });
+      return stream;
     });
-    stream.on("streamEvent", (event) => {
-      if (event.type !== "content_block_start" || !held) return;
-      early.set(held.id, processEarly(held, session, emit));
-      held = null;
-    });
-    const message = await stream.finalMessage();
 
     calls += 1;
     usage.calls += 1;

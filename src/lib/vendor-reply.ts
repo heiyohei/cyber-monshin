@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CLAUDE_PARAMS, client, type Usage } from "./claude.ts";
+import { CLAUDE_PARAMS, client, finalMessageFast, type Usage } from "./claude.ts";
 import {
   applyResults,
   checkResults,
@@ -115,29 +115,31 @@ export async function verifyVendorReply(
 ): Promise<VendorReplyReading> {
   const { question, requirements } = request;
 
-  const stream = client.beta.messages.stream(
-    {
-      ...CLAUDE_PARAMS,
-      betas: [...CLAUDE_PARAMS.betas],
-      output_config: {
-        effort: "medium",
-        format: { type: "json_schema", schema: outputSchema(requirements.map((item) => item.id)) },
-      },
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: JSON.stringify({
-            question,
-            requirements: requirements.map(({ id, text }) => ({ id, text })),
-            vendor_reply: reply,
-          }),
+  const message = await finalMessageFast("verify-reply", (speed, options) =>
+    client.beta.messages.stream(
+      {
+        ...CLAUDE_PARAMS,
+        betas: [...CLAUDE_PARAMS.betas],
+        speed,
+        output_config: {
+          effort: "medium",
+          format: { type: "json_schema", schema: outputSchema(requirements.map((item) => item.id)) },
         },
-      ],
-    },
-    { signal },
+        system: SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: JSON.stringify({
+              question,
+              requirements: requirements.map(({ id, text }) => ({ id, text })),
+              vendor_reply: reply,
+            }),
+          },
+        ],
+      },
+      { signal, ...options },
+    ),
   );
-  const message = await stream.finalMessage();
 
   usage.calls += 1;
   usage.input += message.usage.input_tokens;

@@ -36,17 +36,21 @@ const CONCURRENCY = 3;
 const MAX_ROUNDS = 8;
 // 100万トークンあたりの単価（claude-api の資料から）。キャッシュの書き込みは入力の1.25倍
 const PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
-  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
+  // アプリは Opus を fast mode で呼ぶので、Opus は2倍の単価（キャッシュの倍率も上に掛かる）
+  "claude-opus-5-5": { input: 8, output: 40, cacheRead: 0.4, cacheWrite: 10 },
   "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
   "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
 };
 const PRICE = PRICES[MODEL];
 if (!PRICE) throw new Error(`--model は ${Object.keys(PRICES).join("、")} のどれかにしてください`);
 
-// 問診（interview.ts）と返事の読み解き（vendor-reply.ts）の呼び出しのモデルを差し替える
+// 問診（interview.ts）と返事の読み解き（vendor-reply.ts）の呼び出しのモデルを差し替える。
+// fast mode は Opus だけなので、ほかのモデルでは速さの指定を外す
 const stream = client.beta.messages.stream.bind(client.beta.messages);
-client.beta.messages.stream = ((params: Parameters<typeof stream>[0], options?: Parameters<typeof stream>[1]) =>
-  stream({ ...params, model: MODEL }, options)) as typeof client.beta.messages.stream;
+client.beta.messages.stream = ((params: Parameters<typeof stream>[0], options?: Parameters<typeof stream>[1]) => {
+  const { speed, ...rest } = params;
+  return stream({ ...rest, model: MODEL, ...(MODEL === "claude-opus-5-5" ? { speed } : {}) }, options);
+}) as typeof client.beta.messages.stream;
 const RUNS_DIR = `eval/runs/${new Date().toISOString().replace(/[:.]/g, "-")}`;
 
 // 質問文から、どの観点を聞いているかを言葉で見分ける。項目ごとに持つ
