@@ -55,7 +55,7 @@ test("残っていること：件数のすぐ下に何を数えたかの1行が�
   const checkboxes = holes.getByRole("checkbox");
   const total = await checkboxes.count();
   expect(total).toBe(holeCount * 3);
-  await expect(countNote).toContainText(`（${holeCount}件×3＝${total}件）`);
+  await expect(countNote).toContainText(`${holeCount}か所×3分類＝${total}件`);
 
   // 分類の見出しは3つ（h4）。見出しの件数を足すと全部の件数になり、分類ごとの一覧の項目の数とも合う
   const groupHeadings = holes.getByRole("heading", { level: 4 });
@@ -83,5 +83,5 @@ test("残っていること：件数のすぐ下に何を数えたかの1行が�
   // 「やった」の印を付けると、残っていることの件数だけが減り、数え方の1行（全部の件数）は変わらない
   await checkboxes.first().check();
   await expect(count).toContainText(`残っていること ${total - 1}件`);
-  await expect(countNote).toContainText(`（${holeCount}件×3＝${total}件）`);
+  await expect(countNote).toContainText(`${holeCount}か所×3分類＝${total}件`);
 });

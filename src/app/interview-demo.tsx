@@ -50,7 +50,7 @@ const secondaryClass =
 const STEP_GROUPS = [
   { key: "free", title: "今日から院内でできること" },
   { key: "vendor", title: "ベンダーに聞くこと" },
-  { key: "budget", title: "予算を立てて検討すること（システムの入れ替えや、保守の契約の見直しのときに）" },
+  { key: "budget", title: "予算を立てて検討すること", note: "システムの入れ替えや、保守の契約の見直しのときに" },
 ] as const;
 
 // 返事でも状態が同じだった観点の言い方。返事で決まるのは「できている」か「できていない」だけ
@@ -296,10 +296,14 @@ function verdictNote(card: Card, started: boolean): string {
       const replied = card.viewpoints.filter((viewpoint) => viewpoint.source === "reply").length;
       const from =
         replied === 0 ? "回答" : replied === card.viewpoints.length ? "ベンダーの返事" : "回答とベンダーの返事";
-      return `${from}から分かったことで、実地の確認ではありません。`;
+      return `${from}から分かったことです。実際に見て確かめたものではありません。`;
     }
-    case "paper_only":
-      return `${names(primary)}はできていますが、${parts.join("。")}。`;
+    case "paper_only": {
+      // いちばん大事な観点をまだ確かめていなくても、ほかの観点が否定か不明なら paper_only になる（computeVerdict）。
+      // そのときは「できています」と言わない
+      const head = primary.every((viewpoint) => viewpoint.status === "confirmed") ? `${names(primary)}はできていますが、` : "";
+      return `${head}${parts.join("。")}。`;
+    }
     case "no":
       return `${names(primary)}ができていないため、「いいえ」になります。`;
     case "unknown":
@@ -879,6 +883,8 @@ export function InterviewDemo({
     try {
       const response = await postJson("/api/ask-term", JSON.stringify({ session, question: termInput }));
       if (!response.ok) {
+        // やり直したときに、同じ待ちの文でも読み上げられるよう空にする
+        setLive("");
         await failFrom(response);
         return;
       }
@@ -890,6 +896,7 @@ export function InterviewDemo({
       setTermNote(false);
       setLive(`ことばの相談の答え：${data.answer}`);
     } catch {
+      setLive("");
       showError(CONNECTION_ERROR);
     } finally {
       setTermBusy(false);
@@ -962,6 +969,8 @@ export function InterviewDemo({
         JSON.stringify({ session, image: { media_type: "image/jpeg", data: preparedImage.data } }),
       );
       if (!response.ok) {
+        // やり直したときに、同じ待ちの文でも読み上げられるよう空にする
+        setLive("");
         await failFrom(response);
         return;
       }
@@ -976,6 +985,7 @@ export function InterviewDemo({
       setLive(`写真を読み取りました。写っているもの：${reading.subject}`);
       requestFocus("image");
     } catch {
+      setLive("");
       showError(CONNECTION_ERROR);
     } finally {
       setImageBusy(false);
@@ -1150,14 +1160,16 @@ export function InterviewDemo({
       <CodeHeading id="access-code-heading" className="text-std-20B-150 text-blue-900">
         合言葉が必要です
       </CodeHeading>
-      <p id="access-code-after" className="text-std-16N-170 text-solid-gray-900">
-        このアプリは、いまは合言葉を知っている方だけが使えます。{codeAfter}
-      </p>
+      {/* 見出し → いまやること（サーバーの文。違うときはその知らせ）→ 確かめたあとどうなるか、の順。
+          違うときの赤は、青い背景の上でも文字の濃さの基準（4.5:1）を満たす error-2 にする */}
       <p
         id="access-code-message"
-        className={`text-std-16B-170 ${codeMessage.wrong ? "text-error-1" : "text-solid-gray-900"}`}
+        className={`text-std-16B-170 ${codeMessage.wrong ? "text-error-2" : "text-solid-gray-900"}`}
       >
         {codeMessage.text}
+      </p>
+      <p id="access-code-after" className="text-std-16N-170 text-solid-gray-900">
+        このアプリは、いまは合言葉を知っている方だけが使えます。{codeAfter}
       </p>
       <label htmlFor="access-code" className={labelClass}>
         合言葉（このアプリを案内した人に聞いてください）
@@ -1229,7 +1241,8 @@ export function InterviewDemo({
           {showTopWait && <Spinner />}
           <div className={showTopWait ? "flex flex-col gap-1" : undefined}>
             <p aria-live="polite" className={showTopWait ? "text-std-18B-160 text-blue-900" : "sr-only"}>
-              {busy ? `${busyMessage}${busySeconds >= LONG_WAIT_SECONDS ? LONG_WAIT_TEXT : ""}` : ""}
+              {busy ? busyMessage : ""}
+              {busy && busySeconds >= LONG_WAIT_SECONDS && <span>{LONG_WAIT_TEXT}</span>}
             </p>
             {showTopWait && <p className="text-std-16N-170 text-solid-gray-900">待っている時間：{busySeconds}秒</p>}
           </div>
@@ -1924,9 +1937,11 @@ export function InterviewDemo({
                 </div>
                 {STEP_GROUPS.map((group) => (
                   <div key={group.key} className="rounded-8 border border-solid-gray-200 p-3">
+                    {/* 件数は見出しの最後に置く。予算の分類の補足は、かっこが重ならないよう見出しの下の1行にする */}
                     <h4 className="text-std-16B-170">
                       {group.title}（{card.result.nextSteps[group.key].length}件）
                     </h4>
+                    {"note" in group && <p className="text-std-16N-170 text-solid-gray-800">{group.note}</p>}
                     <ul className="mt-1 list-disc pl-6 text-std-16N-170">
                       {card.result.nextSteps[group.key].map((step) => {
                         // 読み上げ名は「やった」と項目の文を合わせたもの（どの項目の印かが分かるように）
