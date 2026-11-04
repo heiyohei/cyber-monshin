@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
-import { buildCard, statusLabel, vendorMessage } from "./card.ts";
+import { buildCard, statusLabel, vendorMessage, viewpointByScreenName } from "./card.ts";
 import { initialStates } from "./verdict.ts";
 
 test("カード：確認の出どころを観点ごとに持ち、まだ確かめていない観点には付けない", () => {
@@ -53,4 +53,26 @@ test("質問文：聞く観点の根拠の原文を、重ねずに添える", ()
 test("質問文：根拠がないときは、質問文をそのまま返す", () => {
   const card = buildCard(BACKUP_ITEM, initialStates(BACKUP_ITEM), "yes");
   assert.equal(vendorMessage({ question: "質問", requirements: [] }, card), "質問");
+});
+
+test("カード：観点は画面の表示名（label）で持ち、Claude に渡す観点名（name）は持たない", () => {
+  const card = buildCard(BACKUP_ITEM, initialStates(BACKUP_ITEM), "yes");
+  assert.deepEqual(
+    card.viewpoints.map((viewpoint) => viewpoint.label),
+    BACKUP_ITEM.viewpoints.map((viewpoint) => viewpoint.label),
+  );
+  for (const viewpoint of card.viewpoints) assert.equal("name" in viewpoint, false);
+  const states = { ...initialStates(BACKUP_ITEM), isolate: "denied" as const };
+  assert.deepEqual(
+    buildCard(BACKUP_ITEM, states, "yes").result.holes.map((hole) => hole.label),
+    [BACKUP_ITEM.viewpoints.find((viewpoint) => viewpoint.id === "isolate")?.label],
+  );
+});
+
+test("画面の観点名から観点を探す：表示名でも、前の観点名でも見つかる", () => {
+  for (const viewpoint of BACKUP_ITEM.viewpoints) {
+    assert.equal(viewpointByScreenName(BACKUP_ITEM, `${viewpoint.label}：回答で確認`)?.id, viewpoint.id);
+    assert.equal(viewpointByScreenName(BACKUP_ITEM, viewpoint.name)?.id, viewpoint.id);
+  }
+  assert.equal(viewpointByScreenName(BACKUP_ITEM, "関係のない言葉"), undefined);
 });

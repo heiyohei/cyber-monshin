@@ -18,10 +18,11 @@ export type Card = {
   label: string;
   checkItems: readonly CheckItem[];
   itemEvidence: Evidence;
-  // goal は観点名（取得、切り離しなど）だけでは伝わらないときの説明。画面で名前の下に出す
+  // label は画面に出す観点の表示名（固定データの label）。Claude に渡す観点名（name）はカードに持たない。
+  // goal は表示名だけでは伝わらないときの説明。画面で名前の下に出す
   viewpoints: {
     id: string;
-    name: string;
+    label: string;
     goal: string;
     status: ViewpointStatus;
     source: ViewpointSource | null;
@@ -46,6 +47,15 @@ export function statusLabel(status: ViewpointStatus, source: ViewpointSource | n
   return STATUS_LABELS[status];
 }
 
+// 画面に出た観点名（事務職員役の報告など）から観点を探す。画面は表示名（label）なので、まず表示名で探し、
+// なければ Claude に渡す観点名（name）で探す（表示名を足す前の画面の報告も読めるように）
+export function viewpointByScreenName(item: FocusItem, text: string): FocusItem["viewpoints"][number] | undefined {
+  return (
+    item.viewpoints.find((viewpoint) => text.includes(viewpoint.label)) ??
+    item.viewpoints.find((viewpoint) => text.includes(viewpoint.name))
+  );
+}
+
 // 根拠は固定データだけから作る。判定もここで計算し直す。
 export function buildCard(
   item: FocusItem,
@@ -64,7 +74,7 @@ export function buildCard(
     itemEvidence: item.defaultEvidence,
     viewpoints: item.viewpoints.map((viewpoint) => ({
       id: viewpoint.id,
-      name: viewpoint.name,
+      label: viewpoint.label,
       goal: viewpoint.goal,
       status: states[viewpoint.id],
       source: states[viewpoint.id] === "not_asked" ? null : (sources[viewpoint.id] ?? null),

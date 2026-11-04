@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
+import { ITEMS } from "../data/items.ts";
 import type Anthropic from "@anthropic-ai/sdk";
 import { giveUp, processToolUses, type InterviewEvent } from "./interview.ts";
 import { buildSaveFile, sessionFromSaveFile } from "./save-file.ts";
@@ -169,6 +171,32 @@ test("終了：確認事項がなく穴があれば、穴の観点の固定デ�
   );
   assert.equal(request?.question.includes("控えから実際に戻せることを確かめたことがある"), true);
 });
+
+// 画面の観点名を表示名（label）に変えても、Claude に渡す内容は1文字も変えない（変えると評価が要るため）。
+// get_focus_item の結果（観点の ID、観点名 name、確かめたいこと、根拠など）を、表示名を足す前の版（5714f87）で
+// 計ったハッシュと照らす。固定データの Claude に渡す部分を変えたときは、評価を回してから、ここの値を直す
+const FOCUS_ITEM_HASHES: Record<string, string> = {
+  devices: "4c78c574c59b51a1e9c4e3e8bdff692dbb730ce440b0c4bd562772fbe543310e",
+  update: "aa518f984bb4b6d64ddb06a1791a5123c65f30a665a2d31f069a444d42226764",
+  accounts: "f036942160b382c56baf784f4e2591504ce501dcca0c995a2844cec23dd94b3b",
+  backup: "55e7c5768671c5c29a76a12964f8230282975f88a6270a56407bf22d08b65b5e",
+  continuity: "330eaa7a4b1b0f213e719dc6fefe3e12ab88ced0e9c64b38f24bdb1423080dca",
+};
+
+for (const item of ITEMS) {
+  test(`Claude への入力（${item.name}）：get_focus_item の結果は表示名を足す前と同じで、表示名を含まない`, () => {
+    const session = createSession(item, "yes", "no_item");
+    const [result] = processToolUses([tool("get_focus_item", { item_id: item.id })], session, () => {});
+    assert.equal(result.is_error, undefined);
+    const content = JSON.stringify(result.content);
+    assert.equal(createHash("sha256").update(content).digest("hex"), FOCUS_ITEM_HASHES[item.id]);
+    assert.ok(!content.includes('\\"label\\"'), "表示名の欄が Claude に渡っている");
+    for (const viewpoint of item.viewpoints) {
+      assert.ok(!content.includes(viewpoint.label), `表示名「${viewpoint.label}」が Claude に渡っている`);
+      assert.ok(content.includes(`\\"name\\":\\"${viewpoint.name}\\"`), `観点名「${viewpoint.name}」が渡っていない`);
+    }
+  });
+}
 
 test("検証エラーが続いたら、その観点を「わからない」にして止める", () => {
   const { session, events, emit } = setup();

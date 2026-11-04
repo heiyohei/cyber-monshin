@@ -45,10 +45,11 @@ export async function expectVerdictComputedFromCard(page: Page): Promise<Viewpoi
   const card = verdictCard(page);
   const states: ViewpointStates = {};
   for (const viewpoint of BACKUP_ITEM.viewpoints) {
-    const line = await card.getByText(new RegExp(`^${viewpoint.name}：`)).textContent();
-    const label = (line ?? "").slice(viewpoint.name.length + 1);
+    // 画面の観点名は、固定データの表示名（label）。Claude に渡す観点名（name）は画面に出さない
+    const line = await card.getByText(new RegExp(`^${viewpoint.label}：`)).textContent();
+    const label = (line ?? "").slice(viewpoint.label.length + 1);
     const status = STATUS_BY_LABEL.get(label);
-    expect(status, `${viewpoint.name}の状態の言葉「${label}」は決まった言葉ではありません`).toBeDefined();
+    expect(status, `${viewpoint.label}の状態の言葉「${label}」は決まった言葉ではありません`).toBeDefined();
     states[viewpoint.id] = status!;
   }
   const verdict = computeVerdict(BACKUP_ITEM, states);

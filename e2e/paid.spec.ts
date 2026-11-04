@@ -1,10 +1,12 @@
 import { expect, test, type Page } from "playwright/test";
 import { CASES } from "../eval/cases";
+import { BACKUP_ITEM } from "../src/data/backup";
 import { expectVerdictComputedFromCard, loadSavedResult, saveScreenshot, STATUS_WORDS, verdictCard } from "./helpers";
 
 // 実際の Claude を呼ぶので費用がかかる。E2E_PAID=1 のときだけ動く（npm run test:e2e:paid）。
 // 質問や回答の文は毎回少し変わるので、中身は決め打ちせず、画面の形と、判定がコードの計算と一致することだけを確かめる
-const VIEWPOINT_NAMES = ["取得", "戻す確認", "切り離し", "手順"];
+// 画面に出る観点名は、固定データの表示名（label）。言葉を直してもここは古くならない
+const VIEWPOINT_NAMES = BACKUP_ITEM.viewpoints.map((viewpoint) => viewpoint.label);
 const RESULT_WORDS = ["満たす", "満たさない", "曖昧", "回答なし"];
 const STATUS_PATTERN = `(${STATUS_WORDS.join("|")})`;
 

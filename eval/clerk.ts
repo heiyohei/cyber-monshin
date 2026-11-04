@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { findItem } from "../src/data/items.ts";
+import { viewpointByScreenName } from "../src/lib/card.ts";
 import { PERSONAS, type ClerkPersona } from "./clerk-personas.ts";
 
 const { values } = parseArgs({
@@ -261,10 +262,11 @@ if (!result) throw new Error("結果が返りませんでした");
 const elapsed = (Date.now() - startedAt) / 1000;
 const report = result.subtype === "success" ? (result.structured_output ?? null) : null;
 
-// 本当の状態と、画面に出た状態を比べる。観点は名前で突き合わせる
+// 本当の状態と、画面に出た状態を比べる。観点は名前で突き合わせる。
+// 画面に出るのは表示名（label）なので、まず表示名で探し、なければ Claude に渡す観点名（name）で探す（前の版の画面の報告も読めるように）
 const seen = ((report as { viewpoints_seen?: { name: string; status: string }[] } | null)?.viewpoints_seen ?? []).map(
   (entry) => {
-    const viewpoint = item.viewpoints.find((candidate) => entry.name.includes(candidate.name));
+    const viewpoint = viewpointByScreenName(item, entry.name);
     const expected = viewpoint ? persona.expected[viewpoint.id] : undefined;
     const match = viewpoint && expected ? entry.status.includes(STATUS_LABELS[expected]) : null;
     return { ...entry, viewpointId: viewpoint?.id ?? null, expected: expected ?? null, match };

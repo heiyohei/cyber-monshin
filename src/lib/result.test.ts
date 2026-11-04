@@ -69,7 +69,9 @@ test("結果：穴が3件未満なら見つかった件数だけ示し、次の�
   };
   const result = computeResult(BACKUP_ITEM, states);
   assert.equal(result.holes.length, 1);
-  assert.equal(result.holes[0].name, "戻す確認");
+  assert.equal(result.holes[0].viewpointId, "restore");
+  // 画面に出す名前は、固定データの表示名（label）
+  assert.equal(result.holes[0].label, BACKUP_ITEM.viewpoints.find((viewpoint) => viewpoint.id === "restore")?.label);
   assert.equal(result.nextSteps.free.length, 1);
   assert.equal(result.nextSteps.vendor.length, 1);
   assert.equal(result.nextSteps.budget.length, 1);

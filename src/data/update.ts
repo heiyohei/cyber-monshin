@@ -34,6 +34,7 @@ export const UPDATE_ITEM = {
     {
       id: "apply",
       name: "適用",
+      label: "更新を入れる",
       goal: "セキュリティの更新を、定期的に当てている",
       evidence: {
         id: "ev_update_apply",
@@ -51,6 +52,7 @@ export const UPDATE_ITEM = {
     {
       id: "responsibility",
       name: "担当の取り決め",
+      label: "更新の担当を決める",
       goal: "誰が更新を当てるかが、ベンダーの保守の対象外の機器も含めて決まっている",
       evidence: {
         id: "ev_update_responsibility",
@@ -68,6 +70,7 @@ export const UPDATE_ITEM = {
     {
       id: "inventory",
       name: "機器の把握",
+      label: "更新が要る機器を把握する",
       goal: "更新が必要な機器とソフトを把握し、サポートが終わったものがないかを確かめている",
       evidence: {
         id: "ev_update_inventory",
@@ -85,6 +88,7 @@ export const UPDATE_ITEM = {
     {
       id: "verify",
       name: "当てたあとの確認",
+      label: "更新のあと動作を確かめる",
       goal: "更新を当てたあと、システムが正しく動くかを確かめている",
       evidence: {
         id: "ev_update_verify",

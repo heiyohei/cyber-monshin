@@ -45,6 +45,7 @@ export const DEVICES_ITEM = {
     {
       id: "remote",
       name: "外からの保守の把握",
+      label: "外から保守する機器を把握する",
       goal: "ベンダーが外から保守している機器がどれかを、ベンダーに確かめて把握している",
       evidence: {
         id: "ev_devices_remote",
@@ -62,6 +63,7 @@ export const DEVICES_ITEM = {
     {
       id: "source_limit",
       name: "つなげる相手の制限",
+      label: "つなげる機器を限る",
       goal: "ネットワークにつなげる機器や相手を、決まったものだけに限っている",
       evidence: {
         id: "ev_devices_source_limit",
@@ -79,6 +81,7 @@ export const DEVICES_ITEM = {
     {
       id: "ledger",
       name: "機器の一覧",
+      label: "機器の一覧を作る",
       goal: "院内のパソコン、サーバー、ネットワーク機器の一覧があり、置き場所や使う人が分かる",
       evidence: {
         id: "ev_devices_ledger",
@@ -96,6 +99,7 @@ export const DEVICES_ITEM = {
     {
       id: "entry_points",
       name: "入口の数",
+      label: "外とつながる入口を絞る",
       goal: "部署ごとに入れた機器や回線も含めて、外とつながる入口が増えすぎないよう管理している",
       evidence: {
         id: "ev_devices_entry_points",

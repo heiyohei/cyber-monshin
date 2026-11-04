@@ -55,6 +55,7 @@ export const ACCOUNTS_ITEM = {
     {
       id: "admin",
       name: "管理者の権限",
+      label: "強い権限を絞る",
       goal: "設定を変えられる強い権限が、必要な人だけに絞られている",
       evidence: {
         id: "ev_accounts_admin",
@@ -72,6 +73,7 @@ export const ACCOUNTS_ITEM = {
     {
       id: "reuse",
       name: "パスワードの使い回し",
+      label: "パスワードを使い回さない",
       goal: "同じパスワードを、複数の機器やシステムで使い回していない（ベンダーが管理する機器も含む）",
       evidence: {
         id: "ev_accounts_reuse",
@@ -89,6 +91,7 @@ export const ACCOUNTS_ITEM = {
     {
       id: "cleanup",
       name: "不要なアカウント",
+      label: "使わないアカウントを止める",
       goal: "退職した人や、使っていないアカウントが残っていない",
       evidence: {
         id: "ev_accounts_cleanup",
@@ -106,6 +109,7 @@ export const ACCOUNTS_ITEM = {
     {
       id: "two_factor",
       name: "ログインの本人確認",
+      label: "ログインの確認を二重にする",
       goal: "ログインのときに、パスワードに加えてICカードや指紋などでも本人を確かめている、または次のシステム更改で入れる予定がある",
       evidence: {
         id: "ev_accounts_two_factor",

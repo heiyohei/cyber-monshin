@@ -79,7 +79,7 @@ export function PrintSheet({ card, done = [], vendor = null }: { card: Card; don
         <p>
           確かめたこと：
           {card.viewpoints
-            .map((viewpoint) => `${viewpoint.name}　${statusLabel(viewpoint.status, viewpoint.source)}`)
+            .map((viewpoint) => `${viewpoint.label}　${statusLabel(viewpoint.status, viewpoint.source)}`)
             .join("／")}
         </p>
       </div>
@@ -94,7 +94,7 @@ export function PrintSheet({ card, done = [], vendor = null }: { card: Card; don
           <ol className="list-decimal pl-6">
             {card.result.holes.map((hole) => (
               <li key={hole.viewpointId} className={ITEM}>
-                {hole.name}：{hole.text}
+                {hole.label}：{hole.text}
               </li>
             ))}
           </ol>

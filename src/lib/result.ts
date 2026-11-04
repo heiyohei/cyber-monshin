@@ -1,7 +1,8 @@
 import type { FocusItem, NextStep, ViewpointDef } from "../data/types.ts";
 import type { ViewpointStates, ViewpointStatus } from "./verdict.ts";
 
-export type Hole = { viewpointId: string; name: string; status: ViewpointStatus; text: string };
+// label は画面に出す観点の表示名（固定データの label）
+export type Hole = { viewpointId: string; label: string; status: ViewpointStatus; text: string };
 
 // 次の一手の分類。画面と説明用の1枚では、この順に出す
 export const STEP_GROUP_KEYS = ["free", "vendor", "budget"] as const;
@@ -55,7 +56,7 @@ export function computeResult(item: FocusItem, states: ViewpointStates): Result 
   return {
     holes: holes.slice(0, TOP).map((viewpoint) => ({
       viewpointId: viewpoint.id,
-      name: viewpoint.name,
+      label: viewpoint.label,
       status: states[viewpoint.id],
       text: holeText(viewpoint, states[viewpoint.id]),
     })),

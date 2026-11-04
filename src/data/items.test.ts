@@ -42,6 +42,20 @@ for (const item of ITEMS) {
     for (const checkItem of item.checkItems) assert.ok(checkItem.keywords.length > 0, checkItem.no);
   });
 
+  // 画面に出す観点の表示名（label）。Claude に渡す観点名（name）とは別に持つ。
+  // 短く（15文字まで）、項目の中で重ならない（画面の言葉から観点を探すとき、別の観点に当たらないように）
+  test(`重点項目（${item.name}）：観点の表示名が空でなく、短く、項目の中で重ならない`, () => {
+    const labels = item.viewpoints.map((viewpoint) => viewpoint.label);
+    for (const viewpoint of item.viewpoints) {
+      assert.ok(viewpoint.label.trim() === viewpoint.label && viewpoint.label.length > 0, viewpoint.id);
+      assert.ok(viewpoint.label.length <= 15, `${viewpoint.label}（${viewpoint.label.length}文字）`);
+      assert.notEqual(viewpoint.label, viewpoint.name, viewpoint.id);
+      const others = labels.filter((label) => label !== viewpoint.label);
+      assert.ok(!others.some((label) => label.includes(viewpoint.label) || viewpoint.label.includes(label)), viewpoint.label);
+    }
+    assert.equal(new Set(labels).size, labels.length);
+  });
+
   // 次の一手の ID は保存ファイルの「やった」印に使う。項目の中で重複せず、項目の ID で始まる（ほかの項目と混ざらない）
   test(`重点項目（${item.name}）：次の一手の ID が重複せず、項目の ID で始まる`, () => {
     const ids = stepIdsOf(item);

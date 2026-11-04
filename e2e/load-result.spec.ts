@@ -1,5 +1,10 @@
 import { expect, test } from "playwright/test";
+import { BACKUP_ITEM } from "../src/data/backup";
 import { expectVerdictComputedFromCard, loadSavedResult, verdictCard } from "./helpers";
+
+// 画面に出る観点名は、固定データの表示名（label）。Claude に渡す観点名（name）は画面に出ない
+const LABEL = Object.fromEntries(BACKUP_ITEM.viewpoints.map((viewpoint) => [viewpoint.id, viewpoint.label]));
+const NAMES = BACKUP_ITEM.viewpoints.map((viewpoint) => viewpoint.name);
 
 // 保存ファイルを読み込むと、判定、止まる穴、次にすること、質問文、説明用の1枚が、固定データから出る。Claude は呼ばない。
 // 照合する文は src/data/backup.ts の固定データと、e2e/fixtures/saved-result-v1.json の値
@@ -11,27 +16,29 @@ test("保存ファイルの読み込み：結果の画面が固定データか�
     page.locator("form").getByText("11月1日に保存した結果を読み込みました。ベンダーの返事を下に貼り付けてください。"),
   ).toBeVisible();
 
-  // 判定はコードが計算する。取得が「回答で確認」で、ほかに穴があるので「はい（書類上だけ）」
+  // 判定はコードが計算する。最も重い観点（acquire）が「回答で確認」で、ほかに穴があるので「はい（書類上だけ）」
   const card = verdictCard(page);
   await expect(card.getByText("はい（書類上だけ）", { exact: true })).toBeVisible();
-  await expect(card.getByText("取得：回答で確認")).toBeVisible();
-  await expect(card.getByText("戻す確認：わからない")).toBeVisible();
-  await expect(card.getByText("切り離し：できていない")).toBeVisible();
-  await expect(card.getByText("手順：回答で確認")).toBeVisible();
+  await expect(card.getByText(`${LABEL.acquire}：回答で確認`)).toBeVisible();
+  await expect(card.getByText(`${LABEL.restore}：わからない`)).toBeVisible();
+  await expect(card.getByText(`${LABEL.isolate}：できていない`)).toBeVisible();
+  await expect(card.getByText(`${LABEL.procedure}：回答で確認`)).toBeVisible();
+  // Claude に渡す観点名（取得、戻す確認など）は、判定カードに出ない
+  for (const name of NAMES) await expect(card.getByText(new RegExp(`^${name}：`))).toHaveCount(0);
   await expectVerdictComputedFromCard(page);
 
   // まとめの表に、保存した「分かったこと」が出る
   const summary = page.getByRole("region", { name: "問診のまとめ" });
-  await expect(summary.getByRole("row", { name: /戻す確認/ })).toContainText("分からないとの回答でした");
+  await expect(summary.getByRole("row", { name: new RegExp(LABEL.restore) })).toContainText("分からないとの回答でした");
   // 保存ファイルには質問と回答が入っていないので、「これまでの質問と回答」の欄は出ない
   await expect(page.getByText(/^これまでの質問と回答/)).toHaveCount(0);
 
-  // 止まる穴は影響の順位（固定データ）で並ぶ。切り離し（できていない）→ 戻す確認（わからない）
+  // 止まる穴は影響の順位（固定データ）で並ぶ。isolate（できていない）→ restore（わからない）
   const holes = page.getByRole("region", { name: "診療が止まるおそれがあるところと次にすること" });
   const holeItems = holes.locator("ol > li");
   await expect(holeItems).toHaveCount(2);
-  await expect(holeItems.nth(0)).toContainText("切り離し：バックアップが、ふだん使う機器につながったままです。");
-  await expect(holeItems.nth(1)).toContainText("戻す確認：「控えから実際に戻せることを確かめたことがある」かどうかが分かりません。");
+  await expect(holeItems.nth(0)).toContainText(`${LABEL.isolate}：バックアップが、ふだん使う機器につながったままです。`);
+  await expect(holeItems.nth(1)).toContainText(`${LABEL.restore}：「控えから実際に戻せることを確かめたことがある」かどうかが分かりません。`);
 
   // 次にすること（固定データの文）
   await expect(holes.getByRole("heading", { name: "次にすること" })).toBeVisible();
@@ -60,7 +67,9 @@ test("保存ファイルの読み込み：結果の画面が固定データか�
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole("heading", { name: "サイバー対策の点検結果（バックアップと復旧）" })).toBeVisible();
   await expect(sheet.getByRole("heading", { name: "判定：はい（書類上だけ）" })).toBeVisible();
-  await expect(sheet).toContainText("確かめたこと：取得　回答で確認／戻す確認　わからない／切り離し　できていない／手順　回答で確認");
+  await expect(sheet).toContainText(
+    `確かめたこと：${LABEL.acquire}　回答で確認／${LABEL.restore}　わからない／${LABEL.isolate}　できていない／${LABEL.procedure}　回答で確認`,
+  );
   await expect(sheet.getByRole("heading", { name: "このままだと診療が止まるおそれがあるところ" })).toBeVisible();
   await expect(sheet).toContainText("実地の確認ではありません。");
   await page.emulateMedia({ media: "screen" });

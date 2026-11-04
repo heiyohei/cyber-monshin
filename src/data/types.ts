@@ -6,7 +6,11 @@ export type NextSteps = { free: NextStep; vendor: NextStep; budget: NextStep };
 
 export type ViewpointDef = {
   id: string;
+  // Claude に渡す観点名（get_focus_item）。変えると問診の読み取りが変わりうるので、評価なしに変えない
   name: string;
+  // 画面に出す表示名。何をすることかが読める短い言葉（「バックアップを取る」など）。Claude には渡さない。
+  // 判定カード、まとめの表、これまでの質問と回答、止まるおそれ、説明用の1枚など、画面ではすべてこちらを使う
+  label: string;
   goal: string;
   evidence: Evidence;
   // 止まる穴の順位。1が最も影響が大きい。Claude には渡さず、コードが使う

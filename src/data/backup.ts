@@ -29,6 +29,7 @@ export const BACKUP_ITEM = {
     {
       id: "acquire",
       name: "取得",
+      label: "バックアップを取る",
       goal: "データの控えを定期的に取っている",
       evidence: {
         id: "ev_backup_acquire",
@@ -46,6 +47,7 @@ export const BACKUP_ITEM = {
     {
       id: "restore",
       name: "戻す確認",
+      label: "バックアップから戻してみる",
       goal: "控えから実際に戻せることを確かめたことがある",
       evidence: {
         id: "ev_backup_restore",
@@ -63,6 +65,7 @@ export const BACKUP_ITEM = {
     {
       id: "isolate",
       name: "切り離し",
+      label: "バックアップを分けて保管する",
       goal: "控えが攻撃の届かない場所に分けて保管されている",
       evidence: {
         id: "ev_backup_isolate",
@@ -80,6 +83,7 @@ export const BACKUP_ITEM = {
     {
       id: "procedure",
       name: "手順",
+      label: "戻す手順を決めておく",
       goal: "誰が何をすれば戻せるかが、手順として決まっている",
       evidence: {
         id: "ev_backup_procedure",

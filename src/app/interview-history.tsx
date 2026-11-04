@@ -6,7 +6,7 @@ import type { HistoryEntry } from "@/lib/history";
 // 文の中の用語は押せるようにしない。長い一覧になるので、Tab で止まる所を増やさないため
 export function InterviewHistory({ entries, card, open }: { entries: HistoryEntry[]; card: Card; open: boolean }) {
   const nameOf = (viewpointId: string) =>
-    card.viewpoints.find((viewpoint) => viewpoint.id === viewpointId)?.name ?? viewpointId;
+    card.viewpoints.find((viewpoint) => viewpoint.id === viewpointId)?.label ?? viewpointId;
 
   return (
     <details open={open} className="rounded-8 border border-solid-gray-200 p-3">

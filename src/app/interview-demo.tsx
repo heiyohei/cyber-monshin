@@ -73,8 +73,8 @@ function suspiciousNotice(suspicious: Suspicious): string {
 
 function replyChangeText(change: ReplyChange): string {
   return change.same
-    ? `${change.name}は、ベンダーの返事でも${SAME_WORDS[change.status]}でした`
-    : `${change.name}は、${change.before}から、${change.after}に変わりました`;
+    ? `${change.label}は、ベンダーの返事でも${SAME_WORDS[change.status]}でした`
+    : `${change.label}は、${change.before}から、${change.after}に変わりました`;
 }
 
 type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[] };
@@ -90,7 +90,7 @@ type CodeSpot = "sample" | "excel" | "resume" | "reply" | "other";
 type PreparedImage = { dataUrl: string; data: string; width: number; height: number };
 // 返事の検証で状態か確認の出どころが変わった観点。結果の下に出して、何が変わったかを示す
 // 状態が同じで出どころだけ変わったときは same にし、矢印でなく「返事でも同じ」と示す
-type ReplyChange = { viewpointId: string; name: string; before: string; after: string; status: ViewpointStatus; same: boolean };
+type ReplyChange = { viewpointId: string; label: string; before: string; after: string; status: ViewpointStatus; same: boolean };
 
 // 通信が止まったときに、画面が「確認しています」のままにならないようにする
 const FETCH_TIMEOUT_MS = 90_000;
@@ -224,7 +224,7 @@ function verdictNote(card: Card, started: boolean): string {
   const primary = card.viewpoints.filter((viewpoint) => primaryIds.includes(viewpoint.id));
   const others = card.viewpoints.filter((viewpoint) => !primaryIds.includes(viewpoint.id));
   // 観点名は判定カードの見出しなので、「」で囲んで名前だと分かるようにする
-  const names = (list: { name: string }[]) => list.map((viewpoint) => `「${viewpoint.name}」`).join("、");
+  const names = (list: { label: string }[]) => list.map((viewpoint) => `「${viewpoint.label}」`).join("、");
   const denied = others.filter((viewpoint) => viewpoint.status === "denied");
   const unknown = others.filter((viewpoint) => viewpoint.status === "unknown");
   const parts: string[] = [];
@@ -424,7 +424,7 @@ export function InterviewDemo({
       setRecent((current) =>
         upsertReading(current, { viewpointId: event.viewpointId, status: event.status, reason: event.reason }),
       );
-      const name = event.card.viewpoints.find((viewpoint) => viewpoint.id === event.viewpointId)?.name;
+      const name = event.card.viewpoints.find((viewpoint) => viewpoint.id === event.viewpointId)?.label;
       setLive(`${name}：${statusLabel(event.status)}。${event.reason}`);
     }
   }
@@ -963,7 +963,7 @@ export function InterviewDemo({
           : [
               {
                 viewpointId: viewpoint.id,
-                name: viewpoint.name,
+                label: viewpoint.label,
                 before,
                 after,
                 status: viewpoint.status,
@@ -1384,7 +1384,7 @@ export function InterviewDemo({
               {recent.map((item) => (
                 <li key={item.viewpointId}>
                   <span className="text-std-16B-170">
-                    {card.viewpoints.find((viewpoint) => viewpoint.id === item.viewpointId)?.name}：
+                    {card.viewpoints.find((viewpoint) => viewpoint.id === item.viewpointId)?.label}：
                     {statusLabel(item.status)}
                   </span>
                   　{item.reason}
@@ -1701,7 +1701,7 @@ export function InterviewDemo({
               <tbody>
                 {card.viewpoints.map((viewpoint) => (
                   <tr key={viewpoint.id} className="border-b border-solid-gray-200 align-top">
-                    <th scope="row" className="py-2 pr-3 font-normal">{viewpoint.name}</th>
+                    <th scope="row" className="py-2 pr-3 font-normal">{viewpoint.label}</th>
                     <td className="py-2 pr-3">{statusLabel(viewpoint.status, viewpoint.source)}</td>
                     <td className="py-2">{reasons[viewpoint.id] ?? "―"}</td>
                   </tr>
@@ -1723,7 +1723,7 @@ export function InterviewDemo({
                 <ol className="flex list-decimal flex-col gap-2 pl-6 text-std-16N-170">
                   {card.result.holes.map((hole) => (
                     <li key={hole.viewpointId}>
-                      <span className="text-std-16B-170">{hole.name}</span>：{hole.text}
+                      <span className="text-std-16B-170">{hole.label}</span>：{hole.text}
                     </li>
                   ))}
                 </ol>
@@ -1941,7 +1941,7 @@ export function InterviewDemo({
                     <ul className="flex flex-col gap-1 text-std-16N-170">
                       {replyChanges.map((change) => (
                         <li key={change.viewpointId}>
-                          <span className="text-std-16B-170">{change.name}</span>：
+                          <span className="text-std-16B-170">{change.label}</span>：
                           {change.same ? `${SAME_WORDS[change.status]}。ベンダーの返事でも同じでした` : `${change.before} → ${change.after}`}
                         </li>
                       ))}
@@ -2018,9 +2018,9 @@ export function InterviewDemo({
                 </p>
               )}
               <p className="text-std-16B-170">
-                {viewpoint.name}：{statusLabel(viewpoint.status, viewpoint.source)}
+                {viewpoint.label}：{statusLabel(viewpoint.status, viewpoint.source)}
               </p>
-              {/* 観点名だけでは「取得」「切り離し」が伝わらないので、確かめたいことを添える */}
+              {/* 観点の表示名（固定データの label）だけでは伝わりきらないことがあるので、確かめたいことを添える */}
               <p className="text-std-16N-170 text-solid-gray-800">
                 <TermText prefix="確かめたいこと：" text={viewpoint.goal} onAskMore={askMore} />
               </p>
