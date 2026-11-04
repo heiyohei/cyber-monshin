@@ -3,12 +3,15 @@ import { z } from "zod";
 import type { FocusItem } from "../data/types.ts";
 import { buildCard, type Card } from "./card.ts";
 import { CLAUDE_PARAMS, client, MAX_CALLS_PER_REQUEST, type Usage } from "./claude.ts";
+import { quoteExists } from "./quote.ts";
 import { itemOf, vendorRequestFor, type InterviewSession, type VendorRequest } from "./session.ts";
 import { computeVerdict, type ViewpointStatus } from "./verdict.ts";
 
 const MAX_QUESTIONS = 5;
 const MAX_VALIDATION_ERRORS = 3;
 const MAX_VENDOR_QUESTIONS = 3;
+// 回答から抜き出す言葉の長さの上限。根拠を短く示すためのもので、選択肢（40字まで）より少し長くしておく
+export const MAX_ANSWER_QUOTE_LENGTH = 60;
 
 type ToolUse = Anthropic.Beta.BetaToolUseBlock;
 type ToolResult = Anthropic.Beta.BetaToolResultBlockParam;
@@ -16,7 +19,16 @@ type ToolResult = Anthropic.Beta.BetaToolResultBlockParam;
 export type InterviewEvent =
   | { type: "thinking" }
   | { type: "question"; text: string; why: string; options: string[] }
-  | { type: "viewpoint_updated"; viewpointId: string; status: ViewpointStatus; reason: string; card: Card }
+  // quote は、読み取りのもとになった回答の言葉（回答からそのまま抜き出したもの。コードが回答に含まれることを確かめ済み）。
+  // 確かめられずに「わからない」にしたときは空文字。画面に出すだけで、判定には使わない
+  | {
+      type: "viewpoint_updated";
+      viewpointId: string;
+      status: ViewpointStatus;
+      reason: string;
+      quote: string;
+      card: Card;
+    }
   | { type: "verdict_updated"; card: Card }
   | { type: "vendor_question_added"; concern: string; question: string }
   | { type: "item_finished"; summary: string; vendor: VendorRequest | null }
@@ -91,9 +103,13 @@ function toolsFor(item: FocusItem): Anthropic.Beta.BetaTool[] {
         viewpoint_id: { type: "string", enum: viewpointIds },
         status: { type: "string", enum: ["confirmed", "denied", "unknown"] },
         answer_ids: { type: "array", items: { type: "string" }, description: "読み取ったもとの回答の ID" },
+        answer_quote: {
+          type: "string",
+          description: `読み取りのもとになった言葉。answer_ids の回答から、言い換えずに、回答の文字をそのまま${MAX_ANSWER_QUOTE_LENGTH}字以内で抜き出す。途中を省いたり、かぎかっこを付けたりしない`,
+        },
         reason: { type: "string", description: "平易な理由" },
       },
-      required: ["item_id", "viewpoint_id", "status", "answer_ids", "reason"],
+      required: ["item_id", "viewpoint_id", "status", "answer_ids", "answer_quote", "reason"],
       additionalProperties: false,
     },
   },
@@ -160,6 +176,7 @@ const ReportSchema = ItemSchema.extend({
   viewpoint_id: z.string(),
   status: z.enum(["confirmed", "denied", "unknown"]),
   answer_ids: z.array(z.string()),
+  answer_quote: z.string(),
   reason: z.string().min(1),
 });
 
@@ -183,6 +200,38 @@ function toolOk(id: string, data: unknown): ToolResult {
 }
 
 const BAD_INPUT = "入力の形が正しくありません。";
+
+export const QUOTE_ERROR = `answer_quote が、answer_ids の回答の中にそのまま見つかりません。回答の文字を言い換えずに、途中を省かず、${MAX_ANSWER_QUOTE_LENGTH}字以内で抜き出してください。`;
+
+// これまでの回答（ID と文）。回答は applyAnswer が ask_question の結果として履歴に積んだものだけで、
+// 写真の下書きから直して送った回答も、送った文がそのまま入っている
+export function answersOf(session: InterviewSession): Map<string, string> {
+  const answers = new Map<string, string>();
+  for (const message of session.messages) {
+    if (message.role !== "user" || typeof message.content === "string") continue;
+    for (const block of message.content) {
+      if (block.type !== "tool_result" || typeof block.content !== "string") continue;
+      try {
+        const data = JSON.parse(block.content) as { answer_id?: unknown; answer?: unknown };
+        if (typeof data.answer_id === "string" && typeof data.answer === "string") answers.set(data.answer_id, data.answer);
+      } catch {
+        // 回答でない結果（JSON でない文）は飛ばす
+      }
+    }
+  }
+  return answers;
+}
+
+// 抜き出した言葉が、指定した回答のどれかにそのまま含まれるか。比べ方はベンダーの返事の引用（quoteExists）と同じ。
+// 前後の空白と、外側に付けたかぎかっこだけは外してから比べる
+export function cleanQuote(quote: string): string {
+  return quote.trim().replace(/^[「『"“]+/, "").replace(/[」』"”]+$/, "").trim();
+}
+
+export function quoteInAnswers(quote: string, answerIds: string[], answers: Map<string, string>): boolean {
+  if (quote.length > MAX_ANSWER_QUOTE_LENGTH) return false;
+  return answerIds.some((id) => quoteExists(quote, answers.get(id) ?? ""));
+}
 
 function wrongItem(session: InterviewSession): string {
   return `item_id は ${session.itemId} を指定してください。`;
@@ -224,6 +273,9 @@ function runReportViewpoint(block: ToolUse, session: InterviewSession, emit: Emi
   if (answerIds.length === 0 || !answerIds.every((id) => known.has(id))) {
     return toolError(block.id, "answer_ids は、実際の回答の ID を1件以上指定してください。");
   }
+  // 読み取りの根拠を、回答の原文で示す。回答にない言葉（言い換えや作り話）は受け付けず、やり直してもらう
+  const quote = cleanQuote(input.data.answer_quote);
+  if (!quoteInAnswers(quote, answerIds, answersOf(session))) return toolError(block.id, QUOTE_ERROR);
 
   const before = computeVerdict(itemOf(session), session.states);
   session.states = { ...session.states, [viewpointId]: input.data.status };
@@ -231,7 +283,7 @@ function runReportViewpoint(block: ToolUse, session: InterviewSession, emit: Emi
   const after = computeVerdict(itemOf(session), session.states);
   const card = buildCard(itemOf(session), session.states, session.lastYearAnswer, session.sources);
 
-  emit({ type: "viewpoint_updated", viewpointId, status: input.data.status, reason: input.data.reason, card });
+  emit({ type: "viewpoint_updated", viewpointId, status: input.data.status, reason: input.data.reason, quote, card });
   if (before !== after) emit({ type: "verdict_updated", card });
   return toolOk(block.id, { verdict: after });
 }
@@ -361,7 +413,7 @@ export function giveUp(blocks: ToolUse[], results: ToolResult[], session: Interv
     session.states = { ...session.states, [viewpointId]: "unknown" };
     const card = buildCard(itemOf(session), session.states, session.lastYearAnswer, session.sources);
     const reason = "確かめられなかったので、わからないとして扱います。";
-    emit({ type: "viewpoint_updated", viewpointId, status: "unknown", reason, card });
+    emit({ type: "viewpoint_updated", viewpointId, status: "unknown", reason, quote: "", card });
     if (before !== computeVerdict(itemOf(session), session.states)) emit({ type: "verdict_updated", card });
   }
   session.finished = true;
@@ -373,7 +425,8 @@ export function giveUp(blocks: ToolUse[], results: ToolResult[], session: Interv
   });
 }
 
-function applyAnswer(session: InterviewSession, answer: string) {
+// 回答を、保留していた質問の結果として履歴に積む。answersOf はここで積んだ形を読む
+export function applyAnswer(session: InterviewSession, answer: string) {
   if (!session.pendingQuestionId) throw new InterviewStop("今は回答を受け付けていません。");
   session.answerCount += 1;
   const answerResult = toolOk(session.pendingQuestionId, { answer_id: `a${session.answerCount}`, answer });

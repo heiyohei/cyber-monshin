@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
 import type Anthropic from "@anthropic-ai/sdk";
-import { giveUp, processToolUses, type InterviewEvent } from "./interview.ts";
+import {
+  answersOf,
+  applyAnswer,
+  giveUp,
+  MAX_ANSWER_QUOTE_LENGTH,
+  processToolUses,
+  QUOTE_ERROR,
+  type InterviewEvent,
+} from "./interview.ts";
+import type { InterviewSession } from "./session.ts";
 import { buildSaveFile, sessionFromSaveFile } from "./save-file.ts";
 import { createSession, vendorRequestFor } from "./session.ts";
 
@@ -10,8 +19,14 @@ function tool(name: string, input: unknown, id = name): Anthropic.Beta.BetaToolU
   return { type: "tool_use", id, name, input } as Anthropic.Beta.BetaToolUseBlock;
 }
 
-function report(viewpoint_id: string, status: string, answer_ids: string[], item_id = "backup") {
-  return tool("report_viewpoint", { item_id, viewpoint_id, status, answer_ids, reason: "理由" });
+function report(viewpoint_id: string, status: string, answer_ids: string[], item_id = "backup", answer_quote = "はい") {
+  return tool("report_viewpoint", { item_id, viewpoint_id, status, answer_ids, answer_quote, reason: "理由" });
+}
+
+// 回答を、画面から送ったときと同じ形で履歴に積む（質問を保留にしてから applyAnswer に渡す）
+function answer(session: InterviewSession, text: string) {
+  session.pendingQuestionId = `ask_${session.answerCount + 1}`;
+  applyAnswer(session, text);
 }
 
 function ask(question_id: string, options: string[] = ["はい", "わからない"]) {
@@ -43,7 +58,7 @@ test("記録：回答のない report_viewpoint は状態を変えない", () =>
 
 test("記録：存在しない回答 ID、観点、項目を拒否する", () => {
   const { session, emit } = setup();
-  session.answerCount = 1;
+  answer(session, "はい");
   for (const block of [
     report("acquire", "confirmed", ["a2"]),
     report("other", "confirmed", ["a1"]),
@@ -56,7 +71,8 @@ test("記録：存在しない回答 ID、観点、項目を拒否する", () =>
 
 test("記録：判定が変わったときだけ判定の通知を出す", () => {
   const { session, events, emit } = setup();
-  session.answerCount = 2;
+  answer(session, "はい");
+  answer(session, "はい");
   processToolUses([report("acquire", "confirmed", ["a1"])], session, emit);
   assert.equal(events.some((event) => event.type === "verdict_updated"), false);
   processToolUses([report("restore", "unknown", ["a2"])], session, emit);
@@ -182,4 +198,95 @@ test("検証エラーが続いたら、その観点を「わからない」に�
   // 止まっても結果の画面へ進める
   const finished = events.find((event) => event.type === "item_finished");
   assert.equal(finished?.type === "item_finished" && finished.vendor !== null, true);
+});
+
+test("根拠の言葉：回答にそのまま含まれる言葉なら受け付け、画面に渡す", () => {
+  const { session, events, emit } = setup();
+  answer(session, "事務長が毎週金曜日に、外付けのハードディスクへコピーしています。");
+  const [result] = processToolUses([report("acquire", "confirmed", ["a1"], "backup", "毎週金曜日に")], session, emit);
+  assert.equal(result.is_error, undefined);
+  assert.equal(session.states.acquire, "confirmed");
+  const updated = events.find((event) => event.type === "viewpoint_updated");
+  assert.equal(updated?.type === "viewpoint_updated" && updated.quote, "毎週金曜日に");
+});
+
+test("根拠の言葉：回答にない言葉（言い換えや途中を省いたもの）は受け付けず、状態を変えない", () => {
+  const { session, events, emit } = setup();
+  answer(session, "事務長が毎週金曜日に、外付けのハードディスクへコピーしています。");
+  for (const quote of ["週に1回コピーしている", "", "　", "毎週金曜日に…コピー"]) {
+    const [result] = processToolUses([report("acquire", "confirmed", ["a1"], "backup", quote)], session, emit);
+    assert.equal(result.is_error, true);
+    assert.equal(result.content, QUOTE_ERROR);
+  }
+  assert.equal(session.states.acquire, "not_asked");
+  assert.equal(events.length, 0);
+});
+
+test("根拠の言葉：answer_ids が指す回答の中だけで探す", () => {
+  const { session, emit } = setup();
+  answer(session, "毎日取っています");
+  answer(session, "戻したことはありません");
+  const only = report("restore", "denied", ["a1"], "backup", "戻したことはありません");
+  assert.equal(processToolUses([only], session, emit)[0].is_error, true);
+  const both = report("restore", "denied", ["a1", "a2"], "backup", "戻したことはありません");
+  assert.equal(processToolUses([both], session, emit)[0].is_error, undefined);
+});
+
+test("根拠の言葉：比べ方は返事の引用と同じ（全角と半角、空白、外側のかぎかっこ）", () => {
+  const { session, events, emit } = setup();
+  answer(session, "ＵＳＢの　ハードディスクに\n毎日 コピー");
+  for (const quote of ["USBのハードディスクに毎日コピー", "「ＵＳＢの ハードディスク」", "  毎日コピー  "]) {
+    assert.equal(processToolUses([report("acquire", "confirmed", ["a1"], "backup", quote)], session, emit)[0].is_error, undefined);
+  }
+  const quotes = events.flatMap((event) => (event.type === "viewpoint_updated" ? [event.quote] : []));
+  // 画面には、外側のかぎかっこと前後の空白を外した言葉を渡す
+  assert.deepEqual(quotes, ["USBのハードディスクに毎日コピー", "ＵＳＢの ハードディスク", "毎日コピー"]);
+});
+
+test("根拠の言葉：長さの上限を超えると、回答に含まれていても受け付けない", () => {
+  const { session, emit } = setup();
+  const long = "あ".repeat(MAX_ANSWER_QUOTE_LENGTH + 1);
+  answer(session, long);
+  assert.equal(processToolUses([report("acquire", "confirmed", ["a1"], "backup", long)], session, emit)[0].is_error, true);
+  const fit = "あ".repeat(MAX_ANSWER_QUOTE_LENGTH);
+  assert.equal(processToolUses([report("acquire", "confirmed", ["a1"], "backup", fit)], session, emit)[0].is_error, undefined);
+});
+
+test("根拠の言葉：選択肢のボタンで答えた回答は、選択肢の文がそのまま根拠になる", () => {
+  const { session, events, emit } = setup();
+  processToolUses([ask("backup_q1")], session, emit);
+  const question = events.find((event) => event.type === "question");
+  assert.ok(question?.type === "question");
+  const option = question.options[0];
+  applyAnswer(session, option);
+  const [result] = processToolUses([report("acquire", "confirmed", ["a1"], "backup", option)], session, emit);
+  assert.equal(result.is_error, undefined);
+});
+
+test("根拠の言葉：これまでの回答は、送った文を回答の ID ごとに読む（回答でない結果は読まない）", () => {
+  const { session, emit } = setup();
+  const results = processToolUses([tool("get_focus_item", { item_id: "backup" })], session, emit);
+  session.messages.push({ role: "user", content: results });
+  answer(session, "一つめ");
+  answer(session, "二つめ");
+  assert.deepEqual([...answersOf(session)], [
+    ["a1", "一つめ"],
+    ["a2", "二つめ"],
+  ]);
+});
+
+// 根拠の言葉は回答の一部なので、「これまでの質問と回答」と同じく保存ファイルに入れない。保存に入る理由（reason）とは別に持つ
+test("根拠の言葉と保存ファイル：抜き出した言葉は保存ファイルに入らない", () => {
+  const { session, events, emit } = setup();
+  answer(session, "去年の春に、控えから1件だけ戻してみました");
+  const block = report("restore", "confirmed", ["a1"], "backup", "控えから1件だけ戻してみました");
+  session.messages.push({ role: "assistant", content: [block] });
+  assert.equal(processToolUses([block], session, emit)[0].is_error, undefined);
+  const reasons = Object.fromEntries(
+    events.flatMap((event) => (event.type === "viewpoint_updated" ? [[event.viewpointId, event.reason]] : [])),
+  );
+  session.finished = true;
+  const text = JSON.stringify(buildSaveFile(session, reasons, "要約"));
+  assert.equal(text.includes("控えから1件だけ戻してみました"), false);
+  assert.equal(text.includes("answer_quote"), false);
 });
