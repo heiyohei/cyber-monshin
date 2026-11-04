@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type Rea
 import { getItem, ITEMS, PLANNED_ITEMS } from "@/data/items";
 import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
 import type { Evidence, FocusItem } from "@/data/types";
-import { InterviewHistory } from "./interview-history";
+import { InterviewHistory, ReadingQuote } from "./interview-history";
 import { PrintSheet } from "./print-sheet";
 import { TermText } from "./term-text";
 import { buildCard, statusLabel, vendorMessage, type Card } from "@/lib/card";
@@ -406,7 +406,12 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setReasons((current) => ({ ...current, [event.viewpointId]: event.reason }));
       setRecentSource("answer");
       setRecent((current) =>
-        upsertReading(current, { viewpointId: event.viewpointId, status: event.status, reason: event.reason }),
+        upsertReading(current, {
+          viewpointId: event.viewpointId,
+          status: event.status,
+          reason: event.reason,
+          quote: event.quote,
+        }),
       );
       const name = event.card.viewpoints.find((viewpoint) => viewpoint.id === event.viewpointId)?.name;
       setLive(`${name}：${statusLabel(event.status)}。${event.reason}`);
@@ -492,7 +497,12 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           if (event.type === "session") received = true;
           if (event.type === "error") failed = true;
           if (event.type === "viewpoint_updated") {
-            readings = upsertReading(readings, { viewpointId: event.viewpointId, status: event.status, reason: event.reason });
+            readings = upsertReading(readings, {
+              viewpointId: event.viewpointId,
+              status: event.status,
+              reason: event.reason,
+              quote: event.quote,
+            });
           }
           handleEvent(event);
         }
@@ -1314,6 +1324,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                     {statusLabel(item.status)}
                   </span>
                   　{item.reason}
+                  <ReadingQuote quote={item.quote} />
                 </li>
               ))}
             </ul>
@@ -1942,6 +1953,10 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                 <TermText prefix="確かめたいこと：" text={viewpoint.goal} onAskMore={askMore} />
               </p>
               {reasons[viewpoint.id] && <p>{reasons[viewpoint.id]}</p>}
+              {/* いまの回答で更新した観点には、読み取りのもとになった回答の言葉を添える。保存ファイルに入る理由（reasons）とは分けて持つ */}
+              <ReadingQuote
+                quote={recentSource === "answer" ? recent.find((item) => item.viewpointId === viewpoint.id)?.quote : undefined}
+              />
               {viewpoint.status !== "not_asked" && (
                 // 根拠は長いので、直前に更新した観点だけ開く。ほかは観点の行が一目で見えるようにたたむ
                 <details

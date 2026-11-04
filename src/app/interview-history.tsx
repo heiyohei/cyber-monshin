@@ -42,6 +42,7 @@ export function InterviewHistory({ entries, card, open }: { entries: HistoryEntr
                           {nameOf(reading.viewpointId)}：{statusLabel(reading.status)}
                         </span>
                         　{reading.reason}
+                        <ReadingQuote quote={reading.quote} />
                       </li>
                     ))}
                   </ul>
@@ -53,4 +54,11 @@ export function InterviewHistory({ entries, card, open }: { entries: HistoryEntr
       </ol>
     </details>
   );
+}
+
+// 読み取りのもとになった回答の言葉。回答は信頼できないデータなので、文字としてだけ出す（React が文字として書き出す）。
+// 言葉がないとき（確かめられずに「わからない」にしたときなど）は何も出さない
+export function ReadingQuote({ quote }: { quote?: string }) {
+  if (!quote) return null;
+  return <span className="block wrap-anywhere text-solid-gray-800">『{quote}』から読み取りました。</span>;
 }
