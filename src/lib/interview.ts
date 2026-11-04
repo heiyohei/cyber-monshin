@@ -3,12 +3,15 @@ import { z } from "zod";
 import type { FocusItem } from "../data/types.ts";
 import { buildCard, type Card } from "./card.ts";
 import { CLAUDE_PARAMS, client, MAX_CALLS_PER_REQUEST, type Usage } from "./claude.ts";
+import { quoteExists } from "./quote.ts";
 import { itemOf, vendorRequestFor, type InterviewSession, type VendorRequest } from "./session.ts";
 import { computeVerdict, type ViewpointStatus } from "./verdict.ts";
 
 const MAX_QUESTIONS = 5;
 const MAX_VALIDATION_ERRORS = 3;
 const MAX_VENDOR_QUESTIONS = 3;
+// 回答から抜き出す言葉の長さの上限。根拠を短く示すためのもので、選択肢（40字まで）より少し長くしておく
+export const MAX_ANSWER_QUOTE_LENGTH = 60;
 
 type ToolUse = Anthropic.Beta.BetaToolUseBlock;
 type ToolResult = Anthropic.Beta.BetaToolResultBlockParam;
@@ -16,7 +19,18 @@ type ToolResult = Anthropic.Beta.BetaToolResultBlockParam;
 export type InterviewEvent =
   | { type: "thinking" }
   | { type: "question"; text: string; why: string; options: string[] }
-  | { type: "viewpoint_updated"; viewpointId: string; status: ViewpointStatus; reason: string; card: Card }
+  // quote は、読み取りのもとになった回答の言葉（コードが回答に含まれることを確かめ、回答の文字のまま切り出したもの）。
+  // quoteAnswer は、その言葉があった回答の番号（1から。何問目の回答か）。
+  // 確かめられずに「わからない」にしたときは空文字と 0。画面に出すだけで、判定には使わない
+  | {
+      type: "viewpoint_updated";
+      viewpointId: string;
+      status: ViewpointStatus;
+      reason: string;
+      quote: string;
+      quoteAnswer: number;
+      card: Card;
+    }
   | { type: "verdict_updated"; card: Card }
   | { type: "vendor_question_added"; concern: string; question: string }
   | { type: "item_finished"; summary: string; vendor: VendorRequest | null }
@@ -91,9 +105,13 @@ function toolsFor(item: FocusItem): Anthropic.Beta.BetaTool[] {
         viewpoint_id: { type: "string", enum: viewpointIds },
         status: { type: "string", enum: ["confirmed", "denied", "unknown"] },
         answer_ids: { type: "array", items: { type: "string" }, description: "読み取ったもとの回答の ID" },
+        answer_quote: {
+          type: "string",
+          description: `読み取りのもとにした回答の言葉。answer_ids のうち1つの回答から、続いている部分を1か所だけ、言い換えずに、回答の文字をそのまま${MAX_ANSWER_QUOTE_LENGTH}字以内で抜き出す。「…」で省いたり、かぎかっこを付けたりしない。回答が長いときは、この観点の読み取りに最も関係する部分を選ぶ。unknown のときも空にせず、「わからない」など回答の一部をそのまま抜き出す`,
+        },
         reason: { type: "string", description: "平易な理由" },
       },
-      required: ["item_id", "viewpoint_id", "status", "answer_ids", "reason"],
+      required: ["item_id", "viewpoint_id", "status", "answer_ids", "answer_quote", "reason"],
       additionalProperties: false,
     },
   },
@@ -160,6 +178,7 @@ const ReportSchema = ItemSchema.extend({
   viewpoint_id: z.string(),
   status: z.enum(["confirmed", "denied", "unknown"]),
   answer_ids: z.array(z.string()),
+  answer_quote: z.string(),
   reason: z.string().min(1),
 });
 
@@ -183,6 +202,69 @@ function toolOk(id: string, data: unknown): ToolResult {
 }
 
 const BAD_INPUT = "入力の形が正しくありません。";
+
+// 根拠の言葉を受け付けなかったときの文。評価（eval/run.ts）は、この2つの文で却下の回数を数える
+export const QUOTE_ERROR =
+  "answer_quote が空か、answer_ids の回答の中に、そのままの文字では見つかりません。answer_ids のうち1つの回答から、続いている部分を1か所だけ、言い換えずに抜き出して、もう一度 report_viewpoint を呼んでください。answer_ids には、その言葉がある回答の ID を入れてください。";
+export const QUOTE_TOO_LONG = `answer_quote が${MAX_ANSWER_QUOTE_LENGTH}字を超えています。回答の中で、この観点の読み取りに最も関係する部分を、${MAX_ANSWER_QUOTE_LENGTH}字以内でそのまま抜き出して、もう一度 report_viewpoint を呼んでください。`;
+
+// これまでの回答（ID と文）。回答は applyAnswer が ask_question の結果として履歴に積んだものだけで、
+// 写真の下書きから直して送った回答も、送った文がそのまま入っている
+export function answersOf(session: InterviewSession): Map<string, string> {
+  const answers = new Map<string, string>();
+  for (const message of session.messages) {
+    if (message.role !== "user" || typeof message.content === "string") continue;
+    for (const block of message.content) {
+      if (block.type !== "tool_result" || typeof block.content !== "string") continue;
+      try {
+        const data = JSON.parse(block.content) as { answer_id?: unknown; answer?: unknown };
+        if (typeof data.answer_id === "string" && typeof data.answer === "string") answers.set(data.answer_id, data.answer);
+      } catch {
+        // 回答でない結果（JSON でない文）は飛ばす
+      }
+    }
+  }
+  return answers;
+}
+
+// 抜き出した言葉が、指定した回答のどれかにそのまま含まれるか。比べ方はベンダーの返事の引用（quoteExists）と同じ。
+// 前後の空白と、外側に付けたかぎかっこだけは外してから比べる
+export function cleanQuote(quote: string): string {
+  return quote.trim().replace(/^[「『"“]+/, "").replace(/[」』"”]+$/, "").trim();
+}
+
+// 回答の中から、抜き出した言葉に当たる部分を、回答の文字のまま切り出す。全角と半角や空白の違いは回答の側に合わせる。
+// 1文字ずつ正規化して位置を対応させるので、文字をまたいで合わさる形（半角カナの濁点など）は見つからず、null を返す
+export function sliceFromAnswer(quote: string, answer: string): string | null {
+  const target = quote.normalize("NFKC").replace(/\s/g, "");
+  if (!target) return null;
+  const chars = Array.from(answer);
+  let normalized = "";
+  const origin: number[] = [];
+  chars.forEach((char, index) => {
+    const part = char.normalize("NFKC").replace(/\s/g, "");
+    normalized += part;
+    for (let unit = 0; unit < part.length; unit += 1) origin.push(index);
+  });
+  const start = normalized.indexOf(target);
+  if (start < 0) return null;
+  return chars.slice(origin[start], origin[start + target.length - 1] + 1).join("");
+}
+
+// 言葉が含まれる回答を、answer_ids のうち新しい回答から探す。見つかった回答の番号と、画面に出す言葉を返す。
+// 画面に出すのは回答から切り出した文字（切り出せないときは、外側を整えた Claude の言葉。回答に含まれることは確かめ済み）
+export function findQuote(
+  quote: string,
+  answerIds: string[],
+  answers: Map<string, string>,
+): { answer: number; text: string } | null {
+  const numbers = [...new Set(answerIds)].map((id) => Number(id.slice(1))).sort((a, b) => b - a);
+  for (const number of numbers) {
+    const answer = answers.get(`a${number}`) ?? "";
+    if (quoteExists(quote, answer)) return { answer: number, text: sliceFromAnswer(quote, answer) ?? quote };
+  }
+  return null;
+}
 
 function wrongItem(session: InterviewSession): string {
   return `item_id は ${session.itemId} を指定してください。`;
@@ -224,6 +306,11 @@ function runReportViewpoint(block: ToolUse, session: InterviewSession, emit: Emi
   if (answerIds.length === 0 || !answerIds.every((id) => known.has(id))) {
     return toolError(block.id, "answer_ids は、実際の回答の ID を1件以上指定してください。");
   }
+  // 読み取りの根拠を、回答の原文で示す。長すぎる言葉と、回答にない言葉（言い換えや作り話）は受け付けず、やり直してもらう
+  const cleaned = cleanQuote(input.data.answer_quote);
+  if (cleaned.length > MAX_ANSWER_QUOTE_LENGTH) return toolError(block.id, QUOTE_TOO_LONG);
+  const quote = findQuote(cleaned, answerIds, answersOf(session));
+  if (!quote) return toolError(block.id, QUOTE_ERROR);
 
   const before = computeVerdict(itemOf(session), session.states);
   session.states = { ...session.states, [viewpointId]: input.data.status };
@@ -231,7 +318,15 @@ function runReportViewpoint(block: ToolUse, session: InterviewSession, emit: Emi
   const after = computeVerdict(itemOf(session), session.states);
   const card = buildCard(itemOf(session), session.states, session.lastYearAnswer, session.sources);
 
-  emit({ type: "viewpoint_updated", viewpointId, status: input.data.status, reason: input.data.reason, card });
+  emit({
+    type: "viewpoint_updated",
+    viewpointId,
+    status: input.data.status,
+    reason: input.data.reason,
+    quote: quote.text,
+    quoteAnswer: quote.answer,
+    card,
+  });
   if (before !== after) emit({ type: "verdict_updated", card });
   return toolOk(block.id, { verdict: after });
 }
@@ -316,13 +411,22 @@ function validateAsk(block: ToolUse, session: InterviewSession): z.infer<typeof 
   return { ...input.data, options };
 }
 
+const REPORT_FIRST = "受け付けなかった report_viewpoint があります。先にその報告を直してください。この呼び出しは行っていません。直した報告を送ったあとで、この呼び出しをもう一度行ってください。";
+
 // 質問より先に、記録と参照のツールを実行する。質問の結果は回答が来るまで保留する。
 export function processToolUses(blocks: ToolUse[], session: InterviewSession, emit: Emit): ToolResult[] {
   const results: ToolResult[] = [];
 
+  // 観点の報告を1件でも受け付けなかった回は、質問と終了も受け付けない。先に報告を直してもらう。
+  // 質問を通すと、やり直しが事務職員の次の回答のあとになり、その回の読み取りから抜けてしまうため
+  let reportFailed = false;
   for (const block of blocks) {
     if (block.name === "get_focus_item") results.push(runGetFocusItem(block, session));
-    else if (block.name === "report_viewpoint") results.push(runReportViewpoint(block, session, emit));
+    else if (block.name === "report_viewpoint") {
+      const result = runReportViewpoint(block, session, emit);
+      if (result.is_error) reportFailed = true;
+      results.push(result);
+    }
     else if (block.name === "add_vendor_question") results.push(runAddVendorQuestion(block, session, emit));
     else if (!["ask_question", "finish_item"].includes(block.name)) {
       results.push(toolError(block.id, "このツールは使えません。"));
@@ -330,10 +434,18 @@ export function processToolUses(blocks: ToolUse[], session: InterviewSession, em
   }
 
   for (const block of blocks.filter((item) => item.name === "finish_item")) {
+    if (reportFailed) {
+      results.push(toolError(block.id, REPORT_FIRST));
+      continue;
+    }
     results.push(runFinishItem(block, session, emit));
   }
 
   for (const block of blocks.filter((item) => item.name === "ask_question")) {
+    if (reportFailed) {
+      results.push(toolError(block.id, REPORT_FIRST));
+      continue;
+    }
     if (session.pendingQuestionId) {
       results.push(toolError(block.id, "1回に聞けるのは1問だけです。"));
       continue;
@@ -350,6 +462,9 @@ export function processToolUses(blocks: ToolUse[], session: InterviewSession, em
   return results;
 }
 
+// 評価（eval/run.ts）は、この文で止まった回を数える
+export const GAVE_UP_MESSAGE = "確認を続けられませんでした。ここまでの内容で結果を示します。";
+
 // 検証エラーが続いたら、その観点を「わからない」にして問診を止める
 export function giveUp(blocks: ToolUse[], results: ToolResult[], session: InterviewSession, emit: Emit) {
   const failedIds = new Set(results.filter((result) => result.is_error).map((result) => result.tool_use_id));
@@ -361,11 +476,11 @@ export function giveUp(blocks: ToolUse[], results: ToolResult[], session: Interv
     session.states = { ...session.states, [viewpointId]: "unknown" };
     const card = buildCard(itemOf(session), session.states, session.lastYearAnswer, session.sources);
     const reason = "確かめられなかったので、わからないとして扱います。";
-    emit({ type: "viewpoint_updated", viewpointId, status: "unknown", reason, card });
+    emit({ type: "viewpoint_updated", viewpointId, status: "unknown", reason, quote: "", quoteAnswer: 0, card });
     if (before !== computeVerdict(itemOf(session), session.states)) emit({ type: "verdict_updated", card });
   }
   session.finished = true;
-  emit({ type: "error", message: "確認を続けられませんでした。ここまでの内容で結果を示します。" });
+  emit({ type: "error", message: GAVE_UP_MESSAGE });
   emit({
     type: "item_finished",
     summary: "確認を続けられなかったため、確かめられなかった観点は「わからない」として扱いました。",
@@ -373,7 +488,8 @@ export function giveUp(blocks: ToolUse[], results: ToolResult[], session: Interv
   });
 }
 
-function applyAnswer(session: InterviewSession, answer: string) {
+// 回答を、保留していた質問の結果として履歴に積む。answersOf はここで積んだ形を読む
+export function applyAnswer(session: InterviewSession, answer: string) {
   if (!session.pendingQuestionId) throw new InterviewStop("今は回答を受け付けていません。");
   session.answerCount += 1;
   const answerResult = toolOk(session.pendingQuestionId, { answer_id: `a${session.answerCount}`, answer });

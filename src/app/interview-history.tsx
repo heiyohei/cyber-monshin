@@ -1,5 +1,5 @@
 import { statusLabel, type Card } from "@/lib/card";
-import type { HistoryEntry } from "@/lib/history";
+import type { HistoryEntry, HistoryReading } from "@/lib/history";
 
 // これまでの質問と回答。自分の答えを見返し、話の流れをたどるための一覧。
 // この画面の中だけで持ち、保存ファイルにも、印刷用の1枚にも入れない（AI には、問診の続きとして質問と回答を送っている）。
@@ -42,6 +42,7 @@ export function InterviewHistory({ entries, card, open }: { entries: HistoryEntr
                           {nameOf(reading.viewpointId)}：{statusLabel(reading.status)}
                         </span>
                         　{reading.reason}
+                        <ReadingQuote reading={reading} current={index + 1} />
                       </li>
                     ))}
                   </ul>
@@ -52,5 +53,18 @@ export function InterviewHistory({ entries, card, open }: { entries: HistoryEntr
         ))}
       </ol>
     </details>
+  );
+}
+
+// 読み取りのもとになった回答の言葉。回答は信頼できないデータなので、文字としてだけ出す（React が文字として書き出す）。
+// current は、この読み取りを付けた回の番号。言葉が前の回答にあったときは「n問目の回答の」と添える。
+// 言葉がないとき（確かめられずに「わからない」にしたときなど）は何も出さない
+export function ReadingQuote({ reading, current }: { reading?: HistoryReading; current: number }) {
+  if (!reading?.quote) return null;
+  const earlier = reading.quoteAnswer && reading.quoteAnswer !== current ? `${reading.quoteAnswer}問目の` : "";
+  return (
+    <span className="block wrap-anywhere text-solid-gray-800">
+      {earlier}回答の『{reading.quote}』から読み取りました。
+    </span>
   );
 }

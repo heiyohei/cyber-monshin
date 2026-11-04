@@ -65,3 +65,12 @@ test("読み取りを足す：同じ観点が2回届いたら、あとの方に�
     ["acquire:confirmed", "restore:confirmed"],
   );
 });
+
+test("控え：読み取りのもとになった回答の言葉と回答の番号は、置き換え、付け足しを通っても残る", () => {
+  const reading = { viewpointId: "acquire", status: "confirmed" as const, reason: "理由", quote: "毎日", quoteAnswer: 1 };
+  const history = appendHistory([], { text: "質問", why: "理由" }, "毎日取っています");
+  const attached = attachReadings(history, upsertReading([], reading));
+  assert.deepEqual(attached[0].readings, [reading]);
+  const later = { ...reading, viewpointId: "restore", quote: "取って", quoteAnswer: 1 };
+  assert.deepEqual(addReadings(attached, [later])[0].readings, [reading, later]);
+});
