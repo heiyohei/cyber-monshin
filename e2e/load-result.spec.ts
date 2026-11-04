@@ -42,9 +42,9 @@ test("保存ファイルの読み込み：結果の画面が固定データか�
 
   // 次にすること（固定データの文）
   await expect(holes.getByRole("heading", { name: "次にすること" })).toBeVisible();
-  await expect(holes.getByText("今日から院内でできること")).toBeVisible();
+  await expect(holes.getByRole("heading", { level: 4, name: /^今日から院内でできること/ })).toBeVisible();
   await expect(
-    holes.getByText("バックアップを保存している機器がどこにあり、ふだんつながったままかを、院内で確かめます。"),
+    holes.getByRole("listitem").getByText("バックアップを保存している機器がどこにあり、ふだんつながったままかを、院内で確かめます。"),
   ).toBeVisible();
 
   // ベンダーへの質問文。保存した質問に、根拠の原文と「厚生労働省が示したものではない」の一文をコードが添える

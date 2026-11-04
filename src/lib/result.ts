@@ -42,6 +42,22 @@ export function stepsCountNote(holeCount: number, total: number): string {
   return `止まるおそれのある${holeCount}か所それぞれに、下の3つの分類へ1件ずつ出しています（${holeCount}か所×3分類＝${total}件）。「やった」の印を付けると、残っていることの件数が減ります。`;
 }
 
+// 「まず、これから」の1件。次にすることの件数が多く、どれから始めるか分からないと、事務職員役の4人が報告したため。
+// 影響の大きい順（穴の並び）に、院内 → ベンダー → 予算の順で見て、「やった」印のない最初の1件を選ぶ。
+// holeLabel は、その一手がどの穴のためかの表示名（上位3つの穴のときだけ分かる）
+export type FirstStep = { step: NextStep; group: StepGroupKey; holeLabel: string | null };
+
+export function firstStep(result: Result, done: readonly string[]): FirstStep | null {
+  const marked = new Set(done);
+  for (let index = 0; index < result.holeCount; index += 1) {
+    for (const group of STEP_GROUP_KEYS) {
+      const step = result.nextSteps[group][index];
+      if (step && !marked.has(step.id)) return { step, group, holeLabel: result.holes[index]?.label ?? null };
+    }
+  }
+  return null;
+}
+
 // 穴の文は「できていない」ときの言い方で書いてある。「わからない」ときは言い切らず、
 // 確かめたいことと、起きうることだけを示す（事務職員役の試用で「分からないと答えたのに言い切られた」と出たため）
 export function holeText(viewpoint: Pick<ViewpointDef, "goal" | "hole">, status: ViewpointStatus): string {

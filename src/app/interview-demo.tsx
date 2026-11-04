@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
-import { getItem, ITEMS, PLANNED_ITEMS } from "@/data/items";
+import { getItem, ITEMS } from "@/data/items";
 import { SAMPLE_HOSPITAL, sampleDescription } from "@/data/sample";
 import type { Evidence, FocusItem } from "@/data/types";
 import { InterviewHistory, ReadingQuote } from "./interview-history";
@@ -22,7 +22,7 @@ import type { InterviewEvent } from "@/lib/interview";
 import { detectPersonalInfo } from "@/lib/pii";
 import type { ReadResult } from "@/lib/quote";
 import type { ImageReading } from "@/lib/read-image";
-import { countSteps, remainingSteps, stepsCountNote } from "@/lib/result";
+import { countSteps, firstStep, remainingSteps, stepsCountNote } from "@/lib/result";
 import { FETCH_TIMEOUT_MS, LONG_WAIT_SECONDS, LONG_WAIT_TEXT, WAIT_TEXTS } from "@/lib/wait";
 import { buildSaveFile } from "@/lib/save-file";
 import type { InterviewSession, LastYearAnswer, SealedSession, VendorAnswer, VendorRequest } from "@/lib/session";
@@ -707,7 +707,12 @@ export function InterviewDemo({
     const remaining = countSteps(remainingSteps(card.result.nextSteps, next));
     const nextChanged = next.length !== savedDone.length || next.some((id) => !savedDone.includes(id));
     const hint = !doneChanged && nextChanged ? "印を残すには、下の保存ボタンでファイルを保存してください。" : "";
-    setLive(`${checked ? "印を付けました" : "印を外しました"}。残っていることは、あと${remaining}件です。${hint}`);
+    // 「まず、これから」の箱は印で中身が変わるので、変わったことも読み上げる（箱は出し入れするので aria-live を付けても読まれない）
+    const before = firstStep(card.result, done)?.step.id;
+    const after = firstStep(card.result, next);
+    const first =
+      after?.step.id === before ? "" : after ? `「まず、これから」は、次の1件に変わりました。` : "「まず、これから」の1件は、すべて終わりました。";
+    setLive(`${checked ? "印を付けました" : "印を外しました"}。残っていることは、あと${remaining}件です。${first}${hint}`);
   }
 
   // 「やった」の印を付けたあとの保存。押したボタンは保存すると消えるので、焦点を「次にすること」の見出しへ戻す
@@ -1277,52 +1282,34 @@ export function InterviewDemo({
               <h2 id="choose-item" className="text-std-20B-150 text-solid-gray-900">
                 1. 確かめる対策を選ぶ
               </h2>
-              <p className="text-std-16N-170">
-                いまは「{item.name}」（チェック項目 {checkItemNumbers(item)}）です。初めてなら、このままで構いません。
-              </p>
-              <details className="rounded-8 border border-solid-gray-200 p-3">
-                <summary className="cursor-pointer text-std-16B-170 text-blue-900 underline focus-visible:focus-ring">
-                  ほかの対策から選ぶ
-                </summary>
-                <fieldset className="mt-3 flex flex-col gap-2">
-                  <legend className="sr-only">確かめる対策</legend>
-                  <p className="text-std-16N-170">
-                    チェックリストのうち、診療が止まる原因になりやすい重点項目5つから選びます。攻撃の流れの順（入られる →
-                    広がる → 戻せない → 止まる）に並んでいます。サンプルと Excel のどちらにも使います。
-                  </p>
+              {/* 5つの対策は、たたまずに最初から選べるようにする（前はたたんだ欄の中にあり、事務職員役の2人が選び方を見つけにくいと言った）。
+                  1280×800 の最初の画面に「サンプルで試す」が入るよう、ボタンを並べず、選ぶ欄1つにし、案内は1行にする。
+                  攻撃の流れの説明は入口では省く（Excel の一覧の表と README にある） */}
+              <div className="flex flex-col gap-1">
+                <label htmlFor="item-select" className={labelClass}>
+                  確かめる対策
+                </label>
+                <p id="item-select-hint" className="text-std-16N-170 text-solid-gray-800">
+                  初めてなら、このままで構いません。開くと5つから選べます。
+                </p>
+                <select
+                  id="item-select"
+                  value={itemId}
+                  onChange={(event) => {
+                    chooseItem(event.target.value);
+                    // 右の判定カードと、サンプルの説明も変わったことを伝える（Excel の表から選んだときは、焦点の移る先で伝わるので、ここだけで言う）
+                    setLive(`確かめる対策を「${getItem(event.target.value)?.name ?? ""}」に変えました。判定カードも変わりました。`);
+                  }}
+                  aria-describedby="item-select-hint"
+                  className={fieldClass}
+                >
                   {ITEMS.map((choice) => (
-                    <label
-                      key={choice.id}
-                      className="flex cursor-pointer items-start gap-3 rounded-8 border border-solid-gray-420 p-3 has-[:checked]:border-blue-900 has-[:checked]:bg-blue-50 has-[:focus-visible]:focus-ring"
-                    >
-                      <input
-                        type="radio"
-                        name="item"
-                        value={choice.id}
-                        checked={itemId === choice.id}
-                        onChange={() => chooseItem(choice.id)}
-                        className="mt-1.5 size-5 accent-blue-900"
-                      />
-                      <span className="text-std-16N-170">
-                        <span className="text-std-16B-170">{choice.name}</span>（チェック項目 {checkItemNumbers(choice)}）
-                        <br />
-                        <span className="text-solid-gray-800">攻撃の流れ：{choice.stage}</span>
-                      </span>
-                    </label>
+                    <option key={choice.id} value={choice.id}>
+                      {choice.name}（チェック項目 {checkItemNumbers(choice)}）
+                    </option>
                   ))}
-                  {PLANNED_ITEMS.map((planned) => (
-                    <div
-                      key={planned.id}
-                      className="flex items-start justify-between gap-3 rounded-8 border border-dashed border-solid-gray-420 p-3 text-std-16N-170 text-solid-gray-800"
-                    >
-                      <span>
-                        {planned.name}（チェック項目 {planned.checkItems.join("、")}）
-                      </span>
-                      <span className="whitespace-nowrap">今後の拡張</span>
-                    </div>
-                  ))}
-                </fieldset>
-              </details>
+                </select>
+              </div>
             </section>
             <section className="flex flex-col gap-3" aria-labelledby="choose-start">
               <h2 id="choose-start" className="text-std-20B-150 text-solid-gray-900">
@@ -1932,6 +1919,27 @@ export function InterviewDemo({
                     ほかに{card.result.holeCount - card.result.holes.length}件あります。
                   </p>
                 )}
+                {/* 件数が多く、どれから始めるか分からないと事務職員役の4人が言ったので、「次にすること」の見出しの前に、最初の1件だけを出す（件数、数え方の1行、一覧は、間をあけずに続ける）。
+                    選び方は firstStep（影響の大きい穴から、院内 → ベンダー → 予算の順）。印を付けると次の1件に変わる */}
+                {(() => {
+                  const first = firstStep(card.result, done);
+                  if (!first) {
+                    // 全部に印を付けたときは、箱が黙って消えないよう1行で知らせる
+                    return countSteps(card.result.nextSteps) > 0 ? (
+                      <p className="text-std-16B-170">次にすることは、すべて「やった」になりました。</p>
+                    ) : null;
+                  }
+                  const groupTitle = STEP_GROUPS.find((group) => group.key === first.group)?.title ?? "";
+                  return (
+                    <div className="flex flex-col gap-1 rounded-8 border-2 border-blue-900 bg-blue-50 p-3">
+                      <h3 className="text-std-20B-150 text-solid-gray-900">まず、これから</h3>
+                      <p className="text-std-16N-170">{first.step.text}</p>
+                      <p className="text-std-16N-170 text-solid-gray-800">
+                        {first.holeLabel ? `「${first.holeLabel}」のために、` : ""}「{groupTitle}」から選んだ1件です。終えたら、下の「次にすること」で、この文と同じ行の「やった」に印を付けてください。次の1件に変わります。
+                      </p>
+                    </div>
+                  );
+                })()}
                 {/* 件数のすぐ下に、何を数えたかを1行で出し、そのすぐ下から一覧を始める（事務職員役が「9件」が何の数か分からず、
                     一覧が閉じて見えたと言ったため）。分類の見出しにも件数を出し、足すと全部の件数になることが見えるようにする */}
                 <div className="flex flex-col gap-1">
@@ -2028,6 +2036,12 @@ export function InterviewDemo({
                 <p className="text-std-16N-170">
                   次の文章を、メールなどでそのままベンダーへ送ってください。点線の下線がある言葉は、押すと短い説明が出ます。説明は、コピーする文には入りません。
                 </p>
+                {/* 引用の専門用語が多く重いと、事務職員役の3人が言った。引用はベンダーに向けた参考なので、全部分からなくても送れることを先に言う */}
+                {vendorMessage(vendor, card).includes("（参考）") && (
+                  <p className="text-std-16N-170">
+                    「（参考）」の下のかぎかっこの中は、厚生労働省の資料の原文です。ベンダーに向けた参考なので、言葉が全部分からなくても、そのまま送って構いません。
+                  </p>
+                )}
                 {/* 質問文と引用の中の用語にも、ほかと同じ点線の下線の説明を付ける。コピーのボタンは元の文字列を写すので、説明は混ざらない */}
                 <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">
                   <TermLines text={vendorMessage(vendor, card)} onAskMore={askMore} />

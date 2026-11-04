@@ -72,13 +72,12 @@ test("Excel の読み込み：去年の回答をブラウザの中で読み取�
   await expect(page.getByLabel("2-⑥ の去年の回答")).toHaveValue(/^(yes|no)$/);
   // 事業者用のシートを読み込んでいないので、ベンダーの回答は要確認
   await expect(page.getByLabel("事業者用チェックリスト 2-⑥ の、ベンダーの回答")).toHaveValue("unknown");
-  await expect(page.getByText("いまは「更新プログラム」（チェック項目 2-⑥）です。")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "確かめる対策", exact: true })).toHaveValue("update");
   await expect(rows.filter({ hasText: "更新プログラム" })).toHaveAttribute("aria-current", "true");
   await expect(backupRow).not.toHaveAttribute("aria-current", "true");
 
-  // 「1. 確かめる対策を選ぶ」（たたんである）から変えても、選択欄はその対策の読み取り結果に切り替わる
-  await page.locator("summary", { hasText: "ほかの対策から選ぶ" }).click();
-  await page.getByRole("radio", { name: /バックアップと復旧/ }).check();
+  // 「1. 確かめる対策を選ぶ」の選ぶ欄から変えても、回答の選択欄はその対策の読み取り結果に切り替わる
+  await page.getByRole("combobox", { name: "確かめる対策", exact: true }).selectOption("backup");
   await expect(page.getByLabel("3-② の去年の回答")).toHaveValue(/^(yes|no)$/);
   await expect(backupRow).toHaveAttribute("aria-current", "true");
 

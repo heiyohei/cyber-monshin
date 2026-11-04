@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
 import { ITEMS } from "../data/items.ts";
-import { computeResult, countSteps, holeText, remainingSteps, stepIdsOf, stepsCountNote } from "./result.ts";
+import { computeResult, countSteps, firstStep, holeText, remainingSteps, stepIdsOf, stepsCountNote } from "./result.ts";
 import { initialStates, type ViewpointStates } from "./verdict.ts";
 
 test("結果：まだ確かめていない観点と確認済みの観点は穴に数えない", () => {
@@ -118,4 +118,23 @@ test("結果：次にすることの件数は、止まるおそれの件数の3�
       assert.ok(stepsCountNote(result.holeCount, total).includes(`${result.holeCount}か所×3分類＝${total}件`));
     }
   }
+});
+
+test("結果：「まず、これから」は、影響のいちばん大きい穴の院内でできることから選び、印を付けると次へ進む", () => {
+  const states: ViewpointStates = { acquire: "confirmed", restore: "unknown", isolate: "denied", procedure: "confirmed" };
+  const result = computeResult(BACKUP_ITEM, states);
+  const first = firstStep(result, []);
+  assert.equal(first?.step.id, "backup.isolate.free");
+  assert.equal(first?.group, "free");
+  assert.equal(first?.holeLabel, result.holes[0].label);
+
+  // 院内 → ベンダー → 予算の順に進み、その穴が済んだら次の穴へ
+  assert.equal(firstStep(result, ["backup.isolate.free"])?.step.id, "backup.isolate.vendor");
+  const sameHole = ["backup.isolate.free", "backup.isolate.vendor", "backup.isolate.budget"];
+  assert.equal(firstStep(result, sameHole)?.step.id, "backup.restore.free");
+  assert.equal(firstStep(result, sameHole)?.holeLabel, result.holes[1].label);
+
+  // すべて済んだとき、穴がないときは出さない
+  assert.equal(firstStep(result, stepIdsOf(BACKUP_ITEM)), null);
+  assert.equal(firstStep(computeResult(BACKUP_ITEM, initialStates(BACKUP_ITEM)), []), null);
 });

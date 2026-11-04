@@ -108,6 +108,19 @@ test("引き継ぎ：「やった」印が保存ファイル（版2）に入り�
   await expect(holes.getByRole("checkbox")).toHaveCount(6);
   // 保存ファイルを読み込んだ直後は、保存し直しの案内は出ない
   await expect(holes.getByText(/「やった」の印を残すには/)).toHaveCount(0);
+  // 「次にすること」の前に「まず、これから」の1件が出る。中身は一覧のどれか1件と同じ文
+  const firstHeading = holes.getByRole("heading", { level: 3, name: "まず、これから" });
+  await expect(firstHeading).toBeVisible();
+  const firstText = firstHeading.locator("xpath=following-sibling::p[1]");
+  const firstBefore = (await firstText.textContent()) ?? "";
+  const firstBox = holes.getByRole("checkbox", { name: `やった ${firstBefore}` });
+  await expect(firstBox).toHaveCount(1);
+  // その1件に印を付けると、次の1件に変わる。印は外して元に戻す
+  await firstBox.check();
+  await expect(firstText).not.toHaveText(firstBefore);
+  await firstBox.uncheck();
+  await expect(firstText).toHaveText(firstBefore);
+  await expect(holes.getByText("残っていること 6件（全部で6件）")).toBeVisible();
 
   // 読み上げ名は「やった」と、その項目の文。2つに印を付けると、残っていることが 6件 → 4件になる
   const isolateFree = holes.getByRole("checkbox", { name: /^やった バックアップを保存している機器がどこにあり/ });

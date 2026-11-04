@@ -25,6 +25,11 @@ test("入口：1280×800 の最初の画面に「サンプルで試す」が入�
   await expect(sample).toHaveCount(1);
   // スクロールしなくても見える（デジタル庁の指針：重要なボタンをスクロールの下に置かない）
   await expect(sample).toBeInViewport({ ratio: 1 });
+  // 5つの対策は、たたまずに最初から選べる（事務職員役の2人が、たたんだ欄の中で見つけにくいと言ったため）
+  const itemSelect = page.getByRole("combobox", { name: "確かめる対策", exact: true });
+  await expect(itemSelect).toBeInViewport();
+  await expect(itemSelect.locator("option")).toHaveCount(5);
+  await expect(itemSelect).toHaveValue("backup");
   await expect(page.getByLabel("Excel を読み込む")).toBeAttached();
   await expect(page.getByLabel("続きを再開するためのファイルを読み込む")).toBeAttached();
   // 見出しとボタンに同じ言葉を使わない（同じ言葉が2回続くと、どちらを押すのか迷う）

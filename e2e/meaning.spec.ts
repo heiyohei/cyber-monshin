@@ -58,7 +58,7 @@ test("残っていること：件数のすぐ下に何を数えたかの1行が�
   await expect(countNote).toContainText(`${holeCount}か所×3分類＝${total}件`);
 
   // 分類の見出しは3つ（h4）。見出しの件数を足すと全部の件数になり、分類ごとの一覧の項目の数とも合う
-  const groupHeadings = holes.getByRole("heading", { level: 4 });
+  const groupHeadings = holes.getByRole("heading", { level: 4, name: /（\d+件）$/ });
   await expect(groupHeadings).toHaveCount(3);
   let sum = 0;
   for (const heading of await groupHeadings.all()) {
