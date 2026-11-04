@@ -32,9 +32,11 @@ const { values } = parseArgs({
 });
 
 // 100万トークンあたりの単価（キャッシュの書き込みは入力の1.25倍）
-const PRICE = values.model?.includes("sonnet")
-  ? { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }
-  : { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
+const PRICE = values.model?.includes("haiku")
+  ? { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 }
+  : values.model?.includes("sonnet")
+    ? { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }
+    : { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
 const calls: Call[] = [];
 let currentRound = 0;

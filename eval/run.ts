@@ -1,8 +1,9 @@
 // 問診と返事の検証を台本で動かして測る。費用がかかる。
-// 使い方：npm run eval -- --note "変更内容" [--case id] [--repeat 3]
+// 使い方：npm run eval -- --note "変更内容" [--case id] [--repeat 3] [--model claude-sonnet-5-5]
+// --model は、問診と返事の読み解きのモデルだけを差し替えて比べる（アプリの設定は変えない）
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { emptyUsage, type Usage } from "../src/lib/claude.ts";
+import { client, emptyUsage, type Usage } from "../src/lib/claude.ts";
 import { viewpointResult } from "../src/lib/quote.ts";
 import {
   GAVE_UP_MESSAGE,
@@ -18,12 +19,34 @@ import { findItem } from "../src/data/items.ts";
 import { verifyVendorReply } from "../src/lib/vendor-reply.ts";
 import { CASES, type EvalCase } from "./cases.ts";
 
-const MODEL = "claude-opus-5-5";
+const { values } = parseArgs({
+  options: {
+    note: { type: "string" },
+    case: { type: "string", multiple: true },
+    repeat: { type: "string", default: "3" },
+    model: { type: "string", default: "claude-opus-5-5" },
+  },
+});
+if (!values.note) throw new Error("--note で変更内容を指定してください");
+
+const MODEL = values.model;
 const EFFORT = "medium";
 const COST_LIMIT = 10;
 const CONCURRENCY = 3;
 const MAX_ROUNDS = 8;
-const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
+// 100万トークンあたりの単価（claude-api の資料から）。キャッシュの書き込みは入力の1.25倍
+const PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
+};
+const PRICE = PRICES[MODEL];
+if (!PRICE) throw new Error(`--model は ${Object.keys(PRICES).join("、")} のどれかにしてください`);
+
+// 問診（interview.ts）と返事の読み解き（vendor-reply.ts）の呼び出しのモデルを差し替える
+const stream = client.beta.messages.stream.bind(client.beta.messages);
+client.beta.messages.stream = ((params: Parameters<typeof stream>[0], options?: Parameters<typeof stream>[1]) =>
+  stream({ ...params, model: MODEL }, options)) as typeof client.beta.messages.stream;
 const RUNS_DIR = `eval/runs/${new Date().toISOString().replace(/[:.]/g, "-")}`;
 
 // 質問文から、どの観点を聞いているかを言葉で見分ける。項目ごとに持つ
@@ -303,14 +326,6 @@ function summarize(runs: RunResult[], cases: EvalCase[]) {
   };
 }
 
-const { values } = parseArgs({
-  options: {
-    note: { type: "string" },
-    case: { type: "string", multiple: true },
-    repeat: { type: "string", default: "3" },
-  },
-});
-if (!values.note) throw new Error("--note で変更内容を指定してください");
 
 // --case は ID の先頭で選ぶ。varied_ なら揺れのあるケースだけを動かす。複数指定すると、どれかに当たるケースを動かす
 const prefixes = values.case ?? [];
