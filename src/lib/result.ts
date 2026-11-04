@@ -37,9 +37,13 @@ export function countSteps(steps: NextStepGroups): number {
 }
 
 // 「残っていること n件（全部で m件）」のすぐ下に出す、何を数えたかの1行。次にすることは、止まるおそれがある観点1つにつき、
-// 3つの分類（院内、ベンダー、予算）に1つずつ出す（computeResult）。「下の3つ」は、すぐ下に並ぶ分類ごとの一覧のこと
-export function stepsCountNote(holeCount: number, total: number): string {
-  return `止まるおそれのある${holeCount}か所それぞれに、下の3つの分類へ1件ずつ出しています（${holeCount}か所×3分類＝${total}件）。「やった」の印を付けると、残っていることの件数が減ります。`;
+// 3つの分類（院内、ベンダー、予算）に1つずつ出す（computeResult）。
+// 前は「3か所×3分類＝9件」と式で書いたが、事務職員役の3人が読みにくい、全部やるのかと迷ったので、式をやめ、
+// 一度に全部をする必要はないことと、「まず、これから」から順に進めることを言う。
+// 「まず、これから」の箱は、全部に「やった」の印を付けると消えるので、箱があるとき（hasFirst）だけ最後の1文を出す
+export function stepsCountNote(holeCount: number, total: number, hasFirst = true): string {
+  const head = `止まるおそれがある${holeCount}か所それぞれに、下の3つの分類（院内でできること、ベンダーに聞くこと、予算の検討）を1件ずつ出していて、合わせて${total}件です。`;
+  return hasFirst ? `${head}一度に全部をする必要はありません。上の「まず、これから」の1件から、順に進めてください。` : head;
 }
 
 // 「まず、これから」の1件。次にすることの件数が多く、どれから始めるか分からないと、事務職員役の4人が報告したため。

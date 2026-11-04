@@ -1952,7 +1952,7 @@ export function InterviewDemo({
                     </p>
                   </div>
                   <p id="steps-count-note" className="text-std-16N-170 text-solid-gray-800">
-                    {stepsCountNote(card.result.holeCount, countSteps(card.result.nextSteps))}
+                    {stepsCountNote(card.result.holeCount, countSteps(card.result.nextSteps), firstStep(card.result, done) !== null)}
                   </p>
                 </div>
                 {STEP_GROUPS.map((group) => (

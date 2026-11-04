@@ -115,7 +115,10 @@ test("結果：次にすることの件数は、止まるおそれの件数の3�
       const total = countSteps(result.nextSteps);
       assert.equal(total, result.holeCount * 3, item.id);
       for (const key of ["free", "vendor", "budget"] as const) assert.equal(result.nextSteps[key].length, result.holeCount);
-      assert.ok(stepsCountNote(result.holeCount, total).includes(`${result.holeCount}か所×3分類＝${total}件`));
+      assert.ok(stepsCountNote(result.holeCount, total).includes(`${result.holeCount}か所それぞれに`));
+      assert.ok(stepsCountNote(result.holeCount, total).includes("「まず、これから」"));
+      assert.ok(!stepsCountNote(result.holeCount, total, false).includes("「まず、これから」"));
+      assert.ok(stepsCountNote(result.holeCount, total).includes(`合わせて${total}件`));
     }
   }
 });
