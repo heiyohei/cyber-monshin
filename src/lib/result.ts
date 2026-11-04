@@ -39,7 +39,7 @@ export function countSteps(steps: NextStepGroups): number {
 // 「残っていること n件（全部で m件）」のすぐ下に出す、何を数えたかの1行。次にすることは、止まるおそれがある観点1つにつき、
 // 3つの分類（院内、ベンダー、予算）に1つずつ出す（computeResult）。「下の3つ」は、すぐ下に並ぶ分類ごとの一覧のこと
 export function stepsCountNote(holeCount: number, total: number): string {
-  return `止まるおそれのある${holeCount}か所それぞれに、下の3つの分類へ1件ずつ出しているので、${holeCount}か所×3分類＝${total}件です。「やった」の印を付けると、残っていることが減ります。`;
+  return `止まるおそれのある${holeCount}か所それぞれに、下の3つの分類へ1件ずつ出しています（${holeCount}か所×3分類＝${total}件）。「やった」の印を付けると、残っていることの件数が減ります。`;
 }
 
 // 穴の文は「できていない」ときの言い方で書いてある。「わからない」ときは言い切らず、

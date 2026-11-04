@@ -269,7 +269,9 @@ const seen = ((report as { viewpoints_seen?: { name: string; status: string }[] 
   (entry) => {
     const viewpoint = viewpointByScreenName(item, entry.name);
     const expected = viewpoint ? persona.expected[viewpoint.id] : undefined;
-    const match = viewpoint && expected ? STATUS_WORDS[expected].some((word) => entry.status.includes(word)) : null;
+    // 役が半角のかっこで書いても合うよう、全角と半角をそろえてから比べる
+    const status = entry.status.normalize("NFKC");
+    const match = viewpoint && expected ? STATUS_WORDS[expected].some((word) => status.includes(word.normalize("NFKC"))) : null;
     return { ...entry, viewpointId: viewpoint?.id ?? null, expected: expected ?? null, match };
   },
 );

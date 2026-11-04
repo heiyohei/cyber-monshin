@@ -50,7 +50,7 @@ const secondaryClass =
 const STEP_GROUPS = [
   { key: "free", title: "今日から院内でできること" },
   { key: "vendor", title: "ベンダーに聞くこと" },
-  { key: "budget", title: "予算を立てて検討すること", note: "システムの入れ替えや、保守の契約の見直しのときに" },
+  { key: "budget", title: "予算を立てて検討すること", note: "システムを入れ替えるときや、保守の契約を見直すときに考えます" },
 ] as const;
 
 // 返事でも状態が同じだった観点の言い方。返事で決まるのは「できている」か「できていない」だけ
@@ -73,9 +73,10 @@ function suspiciousNotice(suspicious: Suspicious): string {
 }
 
 function replyChangeText(change: ReplyChange): string {
+  // 状態の言葉に「（回答から）」が付くので、「から」が続かないよう、名前と状態を「」で囲み「…だったのが」の形にする
   return change.same
-    ? `${change.label}は、ベンダーの返事でも${SAME_WORDS[change.status]}でした`
-    : `${change.label}は、${change.before}から、${change.after}に変わりました`;
+    ? `「${change.label}」は、ベンダーの返事でも「${SAME_WORDS[change.status]}」でした`
+    : `「${change.label}」は、「${change.before}」だったのが、「${change.after}」に変わりました`;
 }
 
 type PersonalInfoWarning = { target: "answer" | "reply" | "term"; kinds: string[] };
