@@ -51,8 +51,10 @@ test("入口：1280×800 の最初の画面に「サンプルで試す」が入�
     "黒戸（くろうど）記念病院と黒戸町は架空です。",
   ]);
 
-  // 使い方の流れは、始め方のあとに残す
+  // 使い方の流れは、始め方のあとに残す。問診の見出し「質問に答える」と同じ言葉を、入口に出さない（質問がもう出ているのか迷うため）
   await expect(page.getByRole("heading", { name: "使い方の流れ" })).toBeAttached();
+  await expect(page.getByText("「この回答で問診を始める」を押すと、最初の質問が出ます。", { exact: false })).toBeAttached();
+  await expect(page.getByText("質問に答える", { exact: true })).toHaveCount(0);
 });
 
 // 本番で合言葉（ACCESS_CODE）があるときの動き。e2e のサーバーは合言葉なしで動くので、

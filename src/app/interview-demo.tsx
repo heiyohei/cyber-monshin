@@ -1507,7 +1507,9 @@ export function InterviewDemo({
                 {codeNotice?.at === "resume" && codeNoticeView}
               </section>
             </section>
-            {/* 使い方の流れは、始め方のあとに置く。始め方を最初の画面に入れるため（前置きは読まれにくい）。くわしい説明はたたむ */}
+            {/* 使い方の流れは、始め方のあとに置く。始め方を最初の画面に入れるため（前置きは読まれにくい）。くわしい説明はたたむ。
+                前は6段階を矢印で並べたが、「質問に答える」が問診の見出しと同じ言葉で、質問がもう出ているのか迷わせた（事務職員役の試用）。
+                何を押すと質問が出るかと、質問文はおそれが見つかったときだけ出ること（vendorRequestFor）を短く言う */}
             <section
               className="flex flex-col gap-2 rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4"
               aria-labelledby="guide-heading"
@@ -1515,16 +1517,9 @@ export function InterviewDemo({
               <h2 id="guide-heading" className="text-std-20B-150 text-blue-900">
                 使い方の流れ
               </h2>
-              <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-std-16N-170">
-                {["対策を選ぶ", "始め方を選ぶ", "質問に答える", "まとめを見る", "質問文を送って保存する", "返事を確かめる"].map(
-                  (step, index, steps) => (
-                    <li key={step} className="flex items-center gap-2">
-                      <span className="text-std-16B-170">{step}</span>
-                      {index < steps.length - 1 && <span aria-hidden="true">→</span>}
-                    </li>
-                  ),
-                )}
-              </ol>
+              <p className="text-std-16N-170">
+                「サンプルで試す」を押すか、Excel を読み込んで「この回答で問診を始める」を押すと、最初の質問が出ます。答えるたびに判定カードが変わり、最後にまとめが出ます。診療が止まるおそれがあるところが見つかったときは、ベンダーに送る質問文も出ます。
+              </p>
               <details>
                 <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">くわしい流れを見る</summary>
                 <ol className="mt-2 flex list-decimal flex-col gap-1 pl-6 text-std-16N-170">
@@ -1536,7 +1531,7 @@ export function InterviewDemo({
                   <li>返事が届いたら、そのファイルを読み込んで、返事を確かめます</li>
                 </ol>
                 <p className="mt-2 text-std-16N-170 text-solid-gray-800">
-                  5と6は、診療が止まるおそれがあるところが見つかったときだけです。
+                  質問文を送ることと、返事を確かめることは、診療が止まるおそれがあるところが見つかったときだけです。
                 </p>
               </details>
             </section>
