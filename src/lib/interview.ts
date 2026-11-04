@@ -414,23 +414,36 @@ function validateAsk(block: ToolUse, session: InterviewSession): z.infer<typeof 
 const REPORT_FIRST = "受け付けなかった report_viewpoint があります。先にその報告を直してください。この呼び出しは行っていません。直した報告を送ったあとで、この呼び出しをもう一度行ってください。";
 
 // 質問より先に、記録と参照のツールを実行する。質問の結果は回答が来るまで保留する。
-export function processToolUses(blocks: ToolUse[], session: InterviewSession, emit: Emit): ToolResult[] {
+// 質問と終了は、応答を最後まで受け取ってから処理する（観点の報告がすべて通ったかで決まるため）
+export function isFinalTool(block: ToolUse): boolean {
+  return block.name === "ask_question" || block.name === "finish_item";
+}
+
+// 質問と終了のほかのツール。応答を書き終える前でも、ブロックが届いた順に処理できる。
+// 観点の報告を先に画面へ送ると、次の質問を書いている間に判定カードが変わる（待ちの大半は書く時間のため）
+export function processEarly(block: ToolUse, session: InterviewSession, emit: Emit): ToolResult {
+  if (block.name === "get_focus_item") return runGetFocusItem(block, session);
+  if (block.name === "report_viewpoint") return runReportViewpoint(block, session, emit);
+  if (block.name === "add_vendor_question") return runAddVendorQuestion(block, session, emit);
+  return toolError(block.id, "このツールは使えません。");
+}
+
+// early は、応答の途中で processEarly 済みの結果（ツールの ID ごと）。同じブロックを2回処理しない
+export function processToolUses(
+  blocks: ToolUse[],
+  session: InterviewSession,
+  emit: Emit,
+  early: Map<string, ToolResult> = new Map(),
+): ToolResult[] {
   const results: ToolResult[] = [];
 
   // 観点の報告を1件でも受け付けなかった回は、質問と終了も受け付けない。先に報告を直してもらう。
   // 質問を通すと、やり直しが事務職員の次の回答のあとになり、その回の読み取りから抜けてしまうため
   let reportFailed = false;
-  for (const block of blocks) {
-    if (block.name === "get_focus_item") results.push(runGetFocusItem(block, session));
-    else if (block.name === "report_viewpoint") {
-      const result = runReportViewpoint(block, session, emit);
-      if (result.is_error) reportFailed = true;
-      results.push(result);
-    }
-    else if (block.name === "add_vendor_question") results.push(runAddVendorQuestion(block, session, emit));
-    else if (!["ask_question", "finish_item"].includes(block.name)) {
-      results.push(toolError(block.id, "このツールは使えません。"));
-    }
+  for (const block of blocks.filter((item) => !isFinalTool(item))) {
+    const result = early.get(block.id) ?? processEarly(block, session, emit);
+    if (block.name === "report_viewpoint" && result.is_error) reportFailed = true;
+    results.push(result);
   }
 
   for (const block of blocks.filter((item) => item.name === "finish_item")) {
@@ -535,6 +548,18 @@ export async function runInterview(
       },
       { signal },
     );
+    // 書き終えたブロックは、次のブロックが始まってから処理する。上限（max_tokens）で切れるのは最後のブロックなので、
+    // 書きかけのブロックは途中で処理しない。最後のブロックは、止まった理由を確かめたあとに processToolUses で処理する
+    const early = new Map<string, ToolResult>();
+    let held: ToolUse | null = null;
+    stream.on("contentBlock", (block) => {
+      held = block.type === "tool_use" && !isFinalTool(block) ? block : null;
+    });
+    stream.on("streamEvent", (event) => {
+      if (event.type !== "content_block_start" || !held) return;
+      early.set(held.id, processEarly(held, session, emit));
+      held = null;
+    });
     const message = await stream.finalMessage();
 
     calls += 1;
@@ -564,7 +589,7 @@ export async function runInterview(
       continue;
     }
 
-    const results = processToolUses(toolUses, session, emit);
+    const results = processToolUses(toolUses, session, emit, early);
     const failed = results.some((result) => result.is_error);
     session.validationErrors = failed ? session.validationErrors + 1 : 0;
 

@@ -49,11 +49,16 @@ client.beta.messages.stream = ((params: Parameters<typeof original>[0], options?
     const now = performance.now();
     if (event.type === "message_start") started = now;
     if (event.type === "content_block_start") {
-      blocks.push(event.content_block.type);
+      const block = event.content_block;
+      blocks.push(block.type === "tool_use" ? block.name : block.type);
       if (!firstOutput && event.content_block.type !== "thinking" && event.content_block.type !== "redacted_thinking") {
         firstOutput = now;
       }
     }
+  });
+  // ブロックを書き終えた時刻（呼び出しの始まりからの秒）。ブロックの名前のあとに付ける
+  stream.on("contentBlock", () => {
+    blocks[blocks.length - 1] += `@${((performance.now() - t0) / 1000).toFixed(1)}`;
   });
   stream.on("finalMessage", (message) => {
     const end = performance.now();

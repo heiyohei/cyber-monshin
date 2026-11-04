@@ -235,6 +235,11 @@ function EvidenceText({ evidence, onAskMore }: { evidence: Evidence; onAskMore?:
 }
 
 // 送った回答の頭の部分。長い回答は30文字で切り、改行は空白にする
+// 読み上げの文を足す。読み取りと判定の変化が同じ塊で届いても、あとの文で前の文を消さない
+function joinLive(current: string, text: string): string {
+  return current ? `${current} ${text}` : text;
+}
+
 function sentPreview(text: string): string {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > 30 ? `${flat.slice(0, 30)}…` : flat;
@@ -494,7 +499,7 @@ export function InterviewDemo({
     if (event.type === "verdict_updated") {
       setCard(event.card);
       setVerdictChange(event.card.label);
-      setLive(`判定が「${event.card.label}」に変わりました。`);
+      setLive((current) => joinLive(current, `判定が「${event.card.label}」に変わりました。`));
     }
     if (event.type === "viewpoint_updated") {
       setCard(event.card);
@@ -510,7 +515,7 @@ export function InterviewDemo({
         }),
       );
       const name = event.card.viewpoints.find((viewpoint) => viewpoint.id === event.viewpointId)?.label;
-      setLive(`${name}：${statusLabel(event.status)}。${event.reason}`);
+      setLive((current) => joinLive(current, `${name}：${statusLabel(event.status)}。${event.reason}`));
     }
   }
 
@@ -561,7 +566,7 @@ export function InterviewDemo({
     },
     spot: CodeSpot = "other",
   ) {
-    const before = { question, card, reasons, recent, verdictChange, history };
+    const before = { question, card, reasons, recent, recentSource, verdictChange, history, canContinue };
     let received = false;
     let failed = false;
     // 回答を送るときは、そのときの質問と回答を「これまでの質問と回答」に控える。読み取りは届いてから付ける。
@@ -569,6 +574,8 @@ export function InterviewDemo({
     const pending = body.answer && question ? appendHistory(history, question, body.answer) : null;
     let readings: HistoryReading[] = [];
     if (pending) setHistory(pending);
+    // 読み取りと判定の変化は、この回の分だけを続けて読み上げる（前の回の文を残さない）
+    setLive("");
     setRecent([]);
     setVerdictChange(null);
     setBusy(true);
@@ -615,6 +622,11 @@ export function InterviewDemo({
               quote: event.quote,
               quoteAnswer: event.quoteAnswer,
             });
+            // 読み取りは次の質問より先に届くので、届いたときに控えにも付け、右の判定カードとそろえる。
+            // 終わりの finally でも同じものを付ける（同じ観点は置き換えるので二重にならない）
+            const current = readings;
+            if (pending) setHistory((entries) => attachReadings(entries, current));
+            else setHistory((entries) => addReadings(entries, current));
           }
           handleEvent(event);
         }
@@ -636,6 +648,10 @@ export function InterviewDemo({
         setCard(before.card);
         setReasons(before.reasons);
         setRecent(before.recent);
+        setRecentSource(before.recentSource);
+        setCanContinue(before.canContinue);
+        // 途中で読み上げた読み取りは取り消されたので、読み上げの領域にも残さない
+        setLive("");
         setVerdictChange(before.verdictChange);
         setHistory(before.history);
       }

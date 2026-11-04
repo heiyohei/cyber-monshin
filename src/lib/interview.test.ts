@@ -8,7 +8,9 @@ import {
   answersOf,
   applyAnswer,
   giveUp,
+  isFinalTool,
   MAX_ANSWER_QUOTE_LENGTH,
+  processEarly,
   processToolUses,
   QUOTE_ERROR,
   QUOTE_TOO_LONG,
@@ -81,6 +83,38 @@ test("記録：判定が変わったときだけ判定の通知を出す", () =>
   assert.equal(events.some((event) => event.type === "verdict_updated"), false);
   processToolUses([report("restore", "unknown", ["a2"])], session, emit);
   assert.equal(events.some((event) => event.type === "verdict_updated"), true);
+});
+
+test("途中の処理：応答の途中で処理した報告は、最後にもう一度処理せず、同じ結果を使う", () => {
+  const { session, events, emit } = setup();
+  answer(session, "はい");
+  const block = report("acquire", "confirmed", ["a1"]);
+  const early = new Map([[block.id, processEarly(block, session, emit)]]);
+  assert.equal(events.filter((event) => event.type === "viewpoint_updated").length, 1);
+  assert.equal(session.states.acquire, "confirmed");
+
+  const results = processToolUses([block], session, emit, early);
+  assert.equal(results[0], early.get(block.id));
+  assert.equal(events.filter((event) => event.type === "viewpoint_updated").length, 1);
+});
+
+test("途中の処理：途中で受け付けなかった報告があれば、質問も受け付けない", () => {
+  const { session, events, emit } = setup();
+  answer(session, "はい");
+  const block = report("acquire", "confirmed", ["a9"]);
+  const early = new Map([[block.id, processEarly(block, session, emit)]]);
+  const results = processToolUses([block, ask("backup_q1")], session, emit, early);
+  assert.equal(results.length, 2);
+  assert.equal(results.every((result) => result.is_error), true);
+  assert.equal(events.some((event) => event.type === "question"), false);
+  assert.equal(session.pendingQuestionId, null);
+});
+
+test("途中の処理：質問と終了は、応答を最後まで受け取ってから処理する", () => {
+  assert.equal(isFinalTool(ask("backup_q1")), true);
+  assert.equal(isFinalTool(tool("finish_item", {})), true);
+  assert.equal(isFinalTool(report("acquire", "confirmed", ["a1"])), false);
+  assert.equal(isFinalTool(tool("get_focus_item", { item_id: "backup" })), false);
 });
 
 test("質問：最初は固定の質問だけを認め、文面は固定データを使う", () => {
