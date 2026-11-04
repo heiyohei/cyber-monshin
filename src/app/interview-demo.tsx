@@ -411,6 +411,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
           status: event.status,
           reason: event.reason,
           quote: event.quote,
+          quoteAnswer: event.quoteAnswer,
         }),
       );
       const name = event.card.viewpoints.find((viewpoint) => viewpoint.id === event.viewpointId)?.name;
@@ -502,6 +503,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               status: event.status,
               reason: event.reason,
               quote: event.quote,
+              quoteAnswer: event.quoteAnswer,
             });
           }
           handleEvent(event);
@@ -665,6 +667,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
       setSuspicious({ quotes: [], overlap: false });
       // 保存ファイルには質問と回答が入っていないので、「これまでの質問と回答」は出さない
       setHistory([]);
+      // 前の問診の「いまの回答で更新」と、回答から抜き出した言葉を判定カードに残さない
+      setRecent([]);
       // 保存した日は表示にだけ使う。形式はサーバーで確かめ済みだが、日付が読めなければ出さない
       const savedAt = new Date(String((JSON.parse(text) as { savedAt?: string }).savedAt ?? ""));
       const when = Number.isNaN(savedAt.getTime())
@@ -1324,7 +1328,7 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
                     {statusLabel(item.status)}
                   </span>
                   　{item.reason}
-                  <ReadingQuote quote={item.quote} />
+                  <ReadingQuote reading={item} current={history.length} />
                 </li>
               ))}
             </ul>
@@ -1955,7 +1959,8 @@ export function InterviewDemo({ initialCard, notice }: { initialCard: Card; noti
               {reasons[viewpoint.id] && <p>{reasons[viewpoint.id]}</p>}
               {/* いまの回答で更新した観点には、読み取りのもとになった回答の言葉を添える。保存ファイルに入る理由（reasons）とは分けて持つ */}
               <ReadingQuote
-                quote={recentSource === "answer" ? recent.find((item) => item.viewpointId === viewpoint.id)?.quote : undefined}
+                reading={recentSource === "answer" ? recent.find((item) => item.viewpointId === viewpoint.id) : undefined}
+                current={history.length}
               />
               {viewpoint.status !== "not_asked" && (
                 // 根拠は長いので、直前に更新した観点だけ開く。ほかは観点の行が一目で見えるようにたたむ

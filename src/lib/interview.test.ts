@@ -9,6 +9,8 @@ import {
   MAX_ANSWER_QUOTE_LENGTH,
   processToolUses,
   QUOTE_ERROR,
+  QUOTE_TOO_LONG,
+  sliceFromAnswer,
   type InterviewEvent,
 } from "./interview.ts";
 import type { InterviewSession } from "./session.ts";
@@ -208,6 +210,7 @@ test("根拠の言葉：回答にそのまま含まれる言葉なら受け付�
   assert.equal(session.states.acquire, "confirmed");
   const updated = events.find((event) => event.type === "viewpoint_updated");
   assert.equal(updated?.type === "viewpoint_updated" && updated.quote, "毎週金曜日に");
+  assert.equal(updated?.type === "viewpoint_updated" && updated.quoteAnswer, 1);
 });
 
 test("根拠の言葉：回答にない言葉（言い換えや途中を省いたもの）は受け付けず、状態を変えない", () => {
@@ -232,6 +235,17 @@ test("根拠の言葉：answer_ids が指す回答の中だけで探す", () => 
   assert.equal(processToolUses([both], session, emit)[0].is_error, undefined);
 });
 
+test("根拠の言葉：言葉があった回答の番号を画面に渡す（同じ言葉が複数の回答にあれば新しい方）", () => {
+  const { session, events, emit } = setup();
+  answer(session, "毎日取っています");
+  answer(session, "戻したことはありません");
+  answer(session, "毎日取っています。戻す練習もしました");
+  processToolUses([report("acquire", "confirmed", ["a1", "a2"], "backup", "毎日取っています")], session, emit);
+  processToolUses([report("acquire", "confirmed", ["a1", "a3"], "backup", "毎日取っています")], session, emit);
+  const numbers = events.flatMap((event) => (event.type === "viewpoint_updated" ? [event.quoteAnswer] : []));
+  assert.deepEqual(numbers, [1, 3]);
+});
+
 test("根拠の言葉：比べ方は返事の引用と同じ（全角と半角、空白、外側のかぎかっこ）", () => {
   const { session, events, emit } = setup();
   answer(session, "ＵＳＢの　ハードディスクに\n毎日 コピー");
@@ -239,15 +253,24 @@ test("根拠の言葉：比べ方は返事の引用と同じ（全角と半角�
     assert.equal(processToolUses([report("acquire", "confirmed", ["a1"], "backup", quote)], session, emit)[0].is_error, undefined);
   }
   const quotes = events.flatMap((event) => (event.type === "viewpoint_updated" ? [event.quote] : []));
-  // 画面には、外側のかぎかっこと前後の空白を外した言葉を渡す
-  assert.deepEqual(quotes, ["USBのハードディスクに毎日コピー", "ＵＳＢの ハードディスク", "毎日コピー"]);
+  // 画面には、Claude の書き方ではなく、回答の文字のまま切り出した言葉を渡す
+  assert.deepEqual(quotes, ["ＵＳＢの　ハードディスクに\n毎日 コピー", "ＵＳＢの　ハードディスク", "毎日 コピー"]);
+});
+
+test("根拠の言葉：回答の文字のまま切り出せない形は null（呼び出し側は Claude の言葉を使う）", () => {
+  assert.equal(sliceFromAnswer("ﾊﾞｯｸｱｯﾌﾟ", "毎日ﾊﾞｯｸｱｯﾌﾟします"), null);
+  assert.equal(sliceFromAnswer("ない言葉", "毎日します"), null);
+  assert.equal(sliceFromAnswer("", "毎日します"), null);
+  assert.equal(sliceFromAnswer("😀を付けて", "絵文字😀を付けて送る"), "😀を付けて");
 });
 
 test("根拠の言葉：長さの上限を超えると、回答に含まれていても受け付けない", () => {
   const { session, emit } = setup();
   const long = "あ".repeat(MAX_ANSWER_QUOTE_LENGTH + 1);
   answer(session, long);
-  assert.equal(processToolUses([report("acquire", "confirmed", ["a1"], "backup", long)], session, emit)[0].is_error, true);
+  const [rejected] = processToolUses([report("acquire", "confirmed", ["a1"], "backup", long)], session, emit);
+  assert.equal(rejected.is_error, true);
+  assert.equal(rejected.content, QUOTE_TOO_LONG);
   const fit = "あ".repeat(MAX_ANSWER_QUOTE_LENGTH);
   assert.equal(processToolUses([report("acquire", "confirmed", ["a1"], "backup", fit)], session, emit)[0].is_error, undefined);
 });
@@ -289,4 +312,45 @@ test("根拠の言葉と保存ファイル：抜き出した言葉は保存フ�
   const text = JSON.stringify(buildSaveFile(session, reasons, "要約"));
   assert.equal(text.includes("控えから1件だけ戻してみました"), false);
   assert.equal(text.includes("answer_quote"), false);
+});
+
+// 報告を受け付けなかった回に質問を通すと、やり直しが事務職員の次の回答のあとになるので、質問と終了も止める
+test("根拠の言葉：報告を受け付けなかった回は、同じ回の質問と終了も受け付けない", () => {
+  const { session, events, emit } = setup();
+  answer(session, "毎日取っています");
+  session.questionCount = 1;
+  const results = processToolUses(
+    [
+      report("acquire", "confirmed", ["a1"], "backup", "週に1回"),
+      ask("", ["はい", "わからない"]),
+      tool("finish_item", { item_id: "backup", summary: "要約" }),
+    ],
+    session,
+    emit,
+  );
+  assert.deepEqual(
+    results.map((result) => result.is_error),
+    [true, true, true],
+  );
+  assert.equal(session.pendingQuestionId, null);
+  assert.equal(session.questionCount, 1);
+  assert.equal(session.finished, false);
+  assert.equal(events.some((event) => event.type === "question"), false);
+
+  // 報告が通れば、同じ回の質問は今までどおり保留になる
+  processToolUses([report("acquire", "confirmed", ["a1"], "backup", "毎日"), ask("", ["はい", "わからない"])], session, emit);
+  assert.equal(session.pendingQuestionId, "ask_question");
+});
+
+test("根拠の言葉：受け付けない言葉が続いて止めたときは、その観点を「わからない」にし、言葉は付けない", () => {
+  const { session, events, emit } = setup();
+  answer(session, "毎日取っています");
+  const block = report("acquire", "confirmed", ["a1"], "backup", "週に1回");
+  const results = processToolUses([block], session, emit);
+  assert.equal(results[0].content, QUOTE_ERROR);
+  giveUp([block], results, session, emit);
+  assert.equal(session.states.acquire, "unknown");
+  const updated = events.find((event) => event.type === "viewpoint_updated");
+  assert.equal(updated?.type === "viewpoint_updated" && updated.quote, "");
+  assert.equal(updated?.type === "viewpoint_updated" && updated.quoteAnswer, 0);
 });

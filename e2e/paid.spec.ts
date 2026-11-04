@@ -71,15 +71,14 @@ test.describe("@paid 実際の Claude を呼ぶ", () => {
     // 読み取ったことは、判定カードと同じ「観点名：状態の言葉」の形。少なくとも1つの観点が読み取られている
     await expect(entries.first().getByText(new RegExp(`^(${VIEWPOINT_NAMES.join("|")})：${STATUS_PATTERN}$`)).first()).toBeVisible();
 
-    // 読み取りの根拠として、回答からそのまま抜き出した言葉が「『…』から読み取りました。」の形で出る。
-    // 言葉はサーバーが回答に含まれることを確かめているので、押した選択肢の文の一部になっている（比べ方は src/lib/quote.ts と同じ）
-    const QUOTE_LINE = /^『.+』から読み取りました。$/;
-    const normalize = (text: string) => text.normalize("NFKC").replace(/\s/g, "");
+    // 読み取りの根拠として、回答からそのまま抜き出した言葉が「回答の『…』から読み取りました。」の形で出る。
+    // 1問目なので「n問目の」は付かない。言葉はサーバーが回答の文字のまま切り出しているので、押した選択肢の文の一部になっている
+    const QUOTE_LINE = /^回答の『[\s\S]+』から読み取りました。$/;
     const quoteLine = entries.first().getByText(QUOTE_LINE).first();
     await expect(quoteLine).toBeVisible();
-    const quoted = ((await quoteLine.textContent()) ?? "").replace(/^『/, "").replace(/』から読み取りました。$/, "");
-    expect(normalize(quoted)).not.toBe("");
-    expect(normalize(chosen)).toContain(normalize(quoted));
+    const quoted = ((await quoteLine.textContent()) ?? "").replace(/^回答の『/, "").replace(/』から読み取りました。$/, "");
+    expect(quoted.trim()).not.toBe("");
+    expect(chosen).toContain(quoted);
     // 右の判定カードの、いまの回答で更新した観点にも同じ形で出る
     await expect(card.getByText(QUOTE_LINE).first()).toBeVisible();
 

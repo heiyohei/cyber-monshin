@@ -4,8 +4,15 @@ import type { ViewpointStatus } from "./verdict.ts";
 // ブラウザの中だけで持ち、サーバーへは送らず、保存ファイル（save-file.ts）にも入れない。
 // 写真で答えたときも、残すのは「回答する」で送った文だけで、写真は残さない
 // quote は、読み取りのもとになった回答の言葉（サーバーで回答に含まれることを確かめたもの）。回答の一部なので、ほかの控えと同じ扱いにする。
+// quoteAnswer は、その言葉があった回答の番号（何問目の回答か）。
 // 確かめられずに「わからない」にしたときや、ベンダーの返事で変わったときはない
-export type HistoryReading = { viewpointId: string; status: ViewpointStatus; reason: string; quote?: string };
+export type HistoryReading = {
+  viewpointId: string;
+  status: ViewpointStatus;
+  reason: string;
+  quote?: string;
+  quoteAnswer?: number;
+};
 export type HistoryQuestion = { text: string; why: string };
 export type HistoryEntry = {
   question: HistoryQuestion;
