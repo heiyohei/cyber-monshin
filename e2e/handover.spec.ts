@@ -200,7 +200,7 @@ test("引き継ぎ：「やった」印が保存ファイル（版2）に入り�
 
 // 次にすることがなければ、1枚には「残っていることはありません」と出る（印を付けるものもない）
 test("引き継ぎ：穴がなければ、1枚に「残っていることはありません」と出る", async ({ page }) => {
-  // 架空の保存ファイルの状態をすべて「回答で確認」にした版1のファイルを作る（形は e2e/fixtures/saved-result-v1.json と同じ）
+  // 架空の保存ファイルの状態をすべて「できている（回答から）」にした版1のファイルを作る（形は e2e/fixtures/saved-result-v1.json と同じ）
   const fixture = JSON.parse(readFileSync(path.join(__dirname, "fixtures", "saved-result-v1.json"), "utf8"));
   fixture.items[0].states = { acquire: "confirmed", restore: "confirmed", isolate: "confirmed", procedure: "confirmed" };
   fixture.items[0].vendorQuestions = [];

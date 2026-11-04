@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
-import { buildCard, statusLabel, vendorMessage, viewpointByScreenName } from "./card.ts";
+import { readFileSync } from "node:fs";
+import { buildCard, STATUS_LABELS, statusLabel, vendorMessage, viewpointByScreenName } from "./card.ts";
 import { initialStates } from "./verdict.ts";
 
 test("カード：確認の出どころを観点ごとに持ち、まだ確かめていない観点には付けない", () => {
@@ -11,13 +12,28 @@ test("カード：確認の出どころを観点ごとに持ち、まだ確か�
   assert.deepEqual(source, { acquire: "reply", restore: "answer", isolate: null, procedure: null });
 });
 
-test("カード：ベンダーの返事で決まった状態だけ、表示の言葉を変える", () => {
-  assert.equal(statusLabel("confirmed", "answer"), "回答で確認");
-  assert.equal(statusLabel("confirmed", null), "回答で確認");
+test("カード：できている観点は、回答からか返事からかを同じ形で添え、「確認」と言い切らない", () => {
+  assert.equal(statusLabel("confirmed", "answer"), "できている（回答から）");
+  assert.equal(statusLabel("confirmed", null), "できている（回答から）");
   assert.equal(statusLabel("confirmed", "reply"), "できている（ベンダーの返事から）");
   assert.equal(statusLabel("denied", "reply"), "できていない（ベンダーの返事から）");
   assert.equal(statusLabel("denied", "answer"), "できていない");
   assert.equal(statusLabel("unknown", "answer"), "わからない");
+  assert.equal(statusLabel("not_asked"), "まだ確かめていません");
+  // 観点の状態の言葉に「確認」を使わない（判定の名前「はい（回答で確認）」は別で、変えていない）
+  for (const status of ["not_asked", "confirmed", "denied", "unknown"] as const) {
+    for (const source of ["answer", "reply", null] as const) assert.ok(!statusLabel(status, source).includes("確認"));
+  }
+});
+
+test("カード：状態の言葉は Claude に渡さない（Claude を呼ぶコードに、状態の言葉も statusLabel も出てこない）", () => {
+  const words = [...Object.values(STATUS_LABELS), "回答で確認", "できている（ベンダーの返事から）", "できていない（ベンダーの返事から）"];
+  for (const file of ["interview.ts", "vendor-reply.ts", "read-image.ts", "term.ts", "claude.ts", "session.ts"]) {
+    const source = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+    assert.ok(!source.includes("statusLabel") && !source.includes("STATUS_LABELS"), file);
+    // 「できていない」「わからない」は、ふつうの言葉として指示の中に出てくる（写真の下書きで判定の言葉を使わない、など）ので除く
+    for (const word of words.filter((word) => word !== "わからない" && word !== "できていない")) assert.ok(!source.includes(`"${word}"`) && !source.includes(`「${word}」`), `${file}：${word}`);
+  }
 });
 
 test("カード：判定と判定の名前は、確認の出どころに左右されない", () => {
@@ -71,7 +87,7 @@ test("カード：観点は画面の表示名（label）で持ち、Claude に�
 
 test("画面の観点名から観点を探す：表示名でも、前の観点名でも見つかる", () => {
   for (const viewpoint of BACKUP_ITEM.viewpoints) {
-    assert.equal(viewpointByScreenName(BACKUP_ITEM, `${viewpoint.label}：回答で確認`)?.id, viewpoint.id);
+    assert.equal(viewpointByScreenName(BACKUP_ITEM, `${viewpoint.label}：できている（回答から）`)?.id, viewpoint.id);
     assert.equal(viewpointByScreenName(BACKUP_ITEM, viewpoint.name)?.id, viewpoint.id);
   }
   assert.equal(viewpointByScreenName(BACKUP_ITEM, "関係のない言葉"), undefined);

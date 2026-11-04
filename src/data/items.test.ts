@@ -64,7 +64,7 @@ for (const item of ITEMS) {
     for (const id of ids) assert.ok(id.startsWith(`${item.id}.`), id);
   });
 
-  test(`重点項目（${item.name}）：最も重い観点が否定なら「いいえ」、すべて確認済みなら「回答で確認」`, () => {
+  test(`重点項目（${item.name}）：最も重い観点が否定なら「いいえ」、すべて確認済みなら「はい（回答で確認）」`, () => {
     const confirmed = Object.fromEntries(item.viewpoints.map((viewpoint) => [viewpoint.id, "confirmed" as const]));
     assert.equal(computeVerdict(item, confirmed), "confirmed_by_answer");
     assert.equal(computeVerdict(item, { ...confirmed, [item.primaryViewpoints[0]]: "denied" }), "no");

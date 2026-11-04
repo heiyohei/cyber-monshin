@@ -16,13 +16,13 @@ test("保存ファイルの読み込み：結果の画面が固定データか�
     page.locator("form").getByText("11月1日に保存した結果を読み込みました。ベンダーの返事を下に貼り付けてください。"),
   ).toBeVisible();
 
-  // 判定はコードが計算する。最も重い観点（acquire）が「回答で確認」で、ほかに穴があるので「はい（書類上だけ）」
+  // 判定はコードが計算する。最も重い観点（acquire）が「できている（回答から）」で、ほかに穴があるので「はい（書類上だけ）」
   const card = verdictCard(page);
   await expect(card.getByText("はい（書類上だけ）", { exact: true })).toBeVisible();
-  await expect(card.getByText(`${LABEL.acquire}：回答で確認`)).toBeVisible();
+  await expect(card.getByText(`${LABEL.acquire}：できている（回答から）`)).toBeVisible();
   await expect(card.getByText(`${LABEL.restore}：わからない`)).toBeVisible();
   await expect(card.getByText(`${LABEL.isolate}：できていない`)).toBeVisible();
-  await expect(card.getByText(`${LABEL.procedure}：回答で確認`)).toBeVisible();
+  await expect(card.getByText(`${LABEL.procedure}：できている（回答から）`)).toBeVisible();
   // Claude に渡す観点名（取得、戻す確認など）は、判定カードに出ない
   for (const name of NAMES) await expect(card.getByText(new RegExp(`^${name}：`))).toHaveCount(0);
   await expectVerdictComputedFromCard(page);
@@ -68,7 +68,7 @@ test("保存ファイルの読み込み：結果の画面が固定データか�
   await expect(sheet.getByRole("heading", { name: "サイバー対策の点検結果（バックアップと復旧）" })).toBeVisible();
   await expect(sheet.getByRole("heading", { name: "判定：はい（書類上だけ）" })).toBeVisible();
   await expect(sheet).toContainText(
-    `確かめたこと：${LABEL.acquire}：回答で確認／${LABEL.restore}：わからない／${LABEL.isolate}：できていない／${LABEL.procedure}：回答で確認`,
+    `確かめたこと：${LABEL.acquire}：できている（回答から）／${LABEL.restore}：わからない／${LABEL.isolate}：できていない／${LABEL.procedure}：できている（回答から）`,
   );
   await expect(sheet.getByRole("heading", { name: "このままだと診療が止まるおそれがあるところ" })).toBeVisible();
   await expect(sheet).toContainText("実地の確認ではありません。");

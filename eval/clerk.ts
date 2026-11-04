@@ -30,12 +30,13 @@ const origin = new URL(values.url).origin;
 const runDir = `eval/runs/clerk-${new Date().toISOString().replace(/[:.]/g, "-")}-${persona.id}`;
 mkdirSync(`${runDir}/browser`, { recursive: true });
 
-// 画面の観点の状態の言葉（src/lib/card.ts の statusLabel と同じ。問診の間は出どころが回答なので、この言葉になる）
-const STATUS_LABELS: Record<string, string> = {
-  not_asked: "まだ確かめていません",
-  confirmed: "回答で確認",
-  denied: "できていない",
-  unknown: "わからない",
+// 画面の観点の状態の言葉（src/lib/card.ts の statusLabel と同じ。問診の間は出どころが回答なので、この言葉になる）。
+// 「できている（回答から）」は、前の画面では「回答で確認」だったので、前の版の報告も読めるよう両方で突き合わせる
+const STATUS_WORDS: Record<string, string[]> = {
+  not_asked: ["まだ確かめていません"],
+  confirmed: ["できている（回答から）", "回答で確認"],
+  denied: ["できていない"],
+  unknown: ["わからない"],
 };
 
 // ブラウザの操作以外は使わせない。任意の JavaScript を動かすツールと、ファイルを扱うツールは拒む
@@ -268,7 +269,7 @@ const seen = ((report as { viewpoints_seen?: { name: string; status: string }[] 
   (entry) => {
     const viewpoint = viewpointByScreenName(item, entry.name);
     const expected = viewpoint ? persona.expected[viewpoint.id] : undefined;
-    const match = viewpoint && expected ? entry.status.includes(STATUS_LABELS[expected]) : null;
+    const match = viewpoint && expected ? STATUS_WORDS[expected].some((word) => entry.status.includes(word)) : null;
     return { ...entry, viewpointId: viewpoint?.id ?? null, expected: expected ?? null, match };
   },
 );

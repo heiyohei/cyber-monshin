@@ -31,15 +31,18 @@ export type Card = {
   result: Result;
 };
 
-const STATUS_LABELS: Record<ViewpointStatus, string> = {
+// 観点の状態の言葉。事務長の回答で決まった「できている」は、ベンダーの返事からの言い方と形をそろえて「（回答から）」と出どころを添える。
+// 前は「回答で確認」だったが、聞いた話を答えただけでも確かめ済みに読めた（事務職員役の試用）。判定の名前「はい（回答で確認）」は変えていない。
+// 保存ファイルや Claude とのやり取りは状態の値（confirmed など）だけで、この言葉は画面にだけ出る
+export const STATUS_LABELS: Record<ViewpointStatus, string> = {
   not_asked: "まだ確かめていません",
-  confirmed: "回答で確認",
+  confirmed: "できている（回答から）",
   denied: "できていない",
   unknown: "わからない",
 };
 
 // 「はい」の裏を見えるようにするため、ベンダーの返事で決まった状態はそう示す。
-// 返事は実地の確認ではないので「確認」と言い切らない
+// 回答も返事も実地の確認ではないので「確認」と言い切らない
 export function statusLabel(status: ViewpointStatus, source: ViewpointSource | null = null): string {
   if (source !== "reply") return STATUS_LABELS[status];
   if (status === "confirmed") return "できている（ベンダーの返事から）";
