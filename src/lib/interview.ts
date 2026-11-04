@@ -205,7 +205,7 @@ const BAD_INPUT = "入力の形が正しくありません。";
 
 // 根拠の言葉を受け付けなかったときの文。評価（eval/run.ts）は、この2つの文で却下の回数を数える
 export const QUOTE_ERROR =
-  "answer_quote が空か、answer_ids の回答の中に、そのままの文字では見つかりません。answer_ids のうち1つの回答から、続いている部分を1か所だけ、言い換えずに抜き出して、もう一度 report_viewpoint を呼んでください。";
+  "answer_quote が空か、answer_ids の回答の中に、そのままの文字では見つかりません。answer_ids のうち1つの回答から、続いている部分を1か所だけ、言い換えずに抜き出して、もう一度 report_viewpoint を呼んでください。answer_ids には、その言葉がある回答の ID を入れてください。";
 export const QUOTE_TOO_LONG = `answer_quote が${MAX_ANSWER_QUOTE_LENGTH}字を超えています。回答の中で、この観点の読み取りに最も関係する部分を、${MAX_ANSWER_QUOTE_LENGTH}字以内でそのまま抜き出して、もう一度 report_viewpoint を呼んでください。`;
 
 // これまでの回答（ID と文）。回答は applyAnswer が ask_question の結果として履歴に積んだものだけで、
@@ -411,7 +411,7 @@ function validateAsk(block: ToolUse, session: InterviewSession): z.infer<typeof 
   return { ...input.data, options };
 }
 
-const REPORT_FIRST = "受け付けなかった report_viewpoint があります。先にその報告を直してください。この呼び出しは行っていません。";
+const REPORT_FIRST = "受け付けなかった report_viewpoint があります。先にその報告を直してください。この呼び出しは行っていません。直した報告を送ったあとで、この呼び出しをもう一度行ってください。";
 
 // 質問より先に、記録と参照のツールを実行する。質問の結果は回答が来るまで保留する。
 export function processToolUses(blocks: ToolUse[], session: InterviewSession, emit: Emit): ToolResult[] {
