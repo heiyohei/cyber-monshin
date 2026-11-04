@@ -79,7 +79,7 @@ export function PrintSheet({ card, done = [], vendor = null }: { card: Card; don
         <p>
           確かめたこと：
           {card.viewpoints
-            .map((viewpoint) => `${viewpoint.label}　${statusLabel(viewpoint.status, viewpoint.source)}`)
+            .map((viewpoint) => `${viewpoint.label}：${statusLabel(viewpoint.status, viewpoint.source)}`)
             .join("／")}
         </p>
       </div>

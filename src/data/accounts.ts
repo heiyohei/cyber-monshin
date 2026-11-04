@@ -73,7 +73,7 @@ export const ACCOUNTS_ITEM = {
     {
       id: "reuse",
       name: "パスワードの使い回し",
-      label: "パスワードを使い回さない",
+      label: "パスワードを別々にする",
       goal: "同じパスワードを、複数の機器やシステムで使い回していない（ベンダーが管理する機器も含む）",
       evidence: {
         id: "ev_accounts_reuse",
@@ -109,7 +109,7 @@ export const ACCOUNTS_ITEM = {
     {
       id: "two_factor",
       name: "ログインの本人確認",
-      label: "ログインの確認を二重にする",
+      label: "ログインで本人確認を2つ使う",
       goal: "ログインのときに、パスワードに加えてICカードや指紋などでも本人を確かめている、または次のシステム更改で入れる予定がある",
       evidence: {
         id: "ev_accounts_two_factor",

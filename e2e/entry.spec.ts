@@ -98,17 +98,17 @@ test("合言葉：「サンプルで試す」のあとに要るときは、押�
   await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
   // 押したボタンも、欄も、見えている範囲にある（画面の上へ飛ばない）
   await expect(sample).toBeInViewport();
-  await expect(form.getByRole("button", { name: "確かめる" })).toBeInViewport();
+  await expect(form.getByRole("button", { name: "合言葉を確かめる" })).toBeInViewport();
 
   // 違うときは、同じ欄に知らせが出て、欄は残る
   await input.fill("ちがう");
-  await form.getByRole("button", { name: "確かめる" }).click();
+  await form.getByRole("button", { name: "合言葉を確かめる" }).click();
   await expect(form).toContainText("合言葉が違います。もう一度入力してください。");
   await expect(input).toBeFocused();
 
   // 正しければ欄が消え、止まった操作（最初の質問を用意する）を自動で続ける
   await input.fill("せいかい");
-  await form.getByRole("button", { name: "確かめる" }).click();
+  await form.getByRole("button", { name: "合言葉を確かめる" }).click();
   await expect(form).toHaveCount(0);
   await expect(page.getByRole("main").getByRole("alert")).toContainText("（テスト）ここで止めます。");
   expect(interviewCalls).toBe(2);
@@ -139,7 +139,7 @@ test("合言葉：保存ファイルの読み込みで要るときは、読み�
   const form = panelOf(page, page.locator("label").filter({ has: resume })).getByRole("form", { name: "合言葉の確認" });
   await expect(form).toBeVisible();
   await form.getByLabel(/^合言葉/).fill("せいかい");
-  await form.getByRole("button", { name: "確かめる" }).click();
+  await form.getByRole("button", { name: "合言葉を確かめる" }).click();
 
   // ファイルを選び直さなくても、結果の画面になる
   await expect(page.getByRole("heading", { name: "問診のまとめ" })).toBeVisible();

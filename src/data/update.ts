@@ -88,7 +88,7 @@ export const UPDATE_ITEM = {
     {
       id: "verify",
       name: "当てたあとの確認",
-      label: "更新のあと動作を確かめる",
+      label: "更新のあと、動作を確かめる",
       goal: "更新を当てたあと、システムが正しく動くかを確かめている",
       evidence: {
         id: "ev_update_verify",

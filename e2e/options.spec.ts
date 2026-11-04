@@ -57,7 +57,8 @@ test("選択肢：キーボードで選択肢を押すと、その文をその�
   await expect(form.getByLabel(/^回答（/)).toBeVisible();
   await expect(form.getByRole("button", { name: "回答する" })).toBeDisabled();
   await expect(form).toContainText("選択肢にない答えや、付け足したいことは、下の欄に書いて「回答する」を押してください。");
-  await expect(form).toContainText("押し間違えたときは、次の回答の欄に「さっきの答えは違います」");
+  await expect(form).toContainText("押し間違えたときは、次の質問の回答欄に「さっきの答えは違います。正しくは…」");
+  await expect(form).toContainText("最後の質問だったときは");
 
   // キーボードだけで：選択肢に焦点を当てて Enter
   const option = group.getByRole("button", { name: "毎日取っている" });
@@ -92,6 +93,52 @@ test("選択肢：続けて2回押しても（ダブルクリック）、回答�
   await expect(page.getByText(SECOND.text)).toBeVisible();
   // 最初の質問を用意する1回と、回答の1回だけ
   expect(mock.answers).toEqual([undefined, "取っていない"]);
+});
+
+test("選択肢：欄に書きかけの文があるときは、選択肢を押せない（書いた文を消さない）", async ({ page }) => {
+  await mockInterview(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "サンプルで試す" }).click();
+  const form = answerForm(page);
+  const options = form.getByRole("group", { name: "答えを選ぶと、すぐに送ります。" }).getByRole("button");
+  await form.getByLabel(/^回答（/).fill("書きかけ");
+  for (const option of await options.all()) await expect(option).toBeDisabled();
+  await expect(form).toContainText("下の欄に文があるときは、選択肢は押せません");
+  await form.getByLabel(/^回答（/).fill("");
+  for (const option of await options.all()) await expect(option).toBeEnabled();
+});
+
+// 問診の途中で合言葉が切れたとき。書き直せる回答は、合言葉を確かめたあとに自動では送らず、もう一度押してもらう
+test("選択肢：回答のときに合言葉が要ると、欄が出て、確かめたあとは自動で送らずに案内へ焦点を移す", async ({ page }) => {
+  const answers: (string | undefined)[] = [];
+  await page.route("**/api/interview", async (route) => {
+    answers.push((route.request().postDataJSON() as { answer?: string }).answer);
+    await route.fulfill(
+      answers.length === 1
+        ? { status: 200, contentType: "application/x-ndjson", body: interviewBody(FIRST, 1) }
+        : {
+            status: 401,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "合言葉の確認が、まだ終わっていません。すぐ下の欄に合言葉を入れて「確かめる」を押してください。" }),
+          },
+    );
+  });
+  await page.route("**/api/access", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "サンプルで試す" }).click();
+  await answerForm(page).getByRole("button", { name: "わからない" }).click();
+
+  const codeForm = page.getByRole("form", { name: "合言葉の確認" });
+  await expect(codeForm.getByLabel(/^合言葉/)).toBeFocused();
+  await codeForm.getByLabel(/^合言葉/).fill("せいかい");
+  await codeForm.getByRole("button", { name: "合言葉を確かめる" }).click();
+  const notice = page.getByText("合言葉を確かめました。先ほど押したボタンを、もう一度押してください。");
+  await expect(notice).toBeFocused();
+  // 自動では送らない（最初の質問の1回と、止まった回答の1回だけ）。質問と選択肢は残っていて、押し直せる
+  expect(answers).toEqual([undefined, "わからない"]);
+  await expect(answerForm(page).getByRole("button", { name: "わからない" })).toBeVisible();
 });
 
 test("選択肢：選択肢にない答えは、欄に書いて「回答する」で送れる", async ({ page }) => {

@@ -82,7 +82,18 @@ type TermExchange = { question: string; answer: string };
 // 直前の回答から読み取った観点。「これまでの質問と回答」に付ける読み取りと同じ形
 type RecentReading = HistoryReading;
 // 画面が切り替わったあとに、キーボードと読み上げの焦点を移す先
-type FocusTarget = "question" | "summary" | "reply" | "results" | "error" | "image" | "code" | "excel" | "term" | "steps";
+type FocusTarget =
+  | "question"
+  | "summary"
+  | "reply"
+  | "results"
+  | "error"
+  | "image"
+  | "code"
+  | "codeNotice"
+  | "excel"
+  | "term"
+  | "steps";
 // 合言葉の欄を出す場所。入口の3つの始め方と返事の欄は、押したボタンのすぐ下に出す。
 // 問診の途中（回答、ことばの相談、写真）は、質問のすぐ上（左の列の上）に出す
 type CodeSpot = "sample" | "excel" | "resume" | "reply" | "other";
@@ -354,7 +365,11 @@ export function InterviewDemo({
   const excelRef = useRef<HTMLParagraphElement>(null);
   // 合言葉で止まった操作。確かめたあとに、同じ操作を続ける（同じボタンを2回押さなくて済むように）
   const retryRef = useRef<(() => void) | null>(null);
-  const [codeNotice, setCodeNotice] = useState("");
+  // 合言葉を確かめたあと、自動で続けない操作のときの案内と、その場所（欄があった所）
+  const [codeNotice, setCodeNotice] = useState<{ text: string; at: CodeSpot } | null>(null);
+  const codeNoticeRef = useRef<HTMLParagraphElement>(null);
+  // 合言葉を確かめている間か（「合言葉を確かめる」の続けての押し直しを止める）
+  const codeSendingRef = useRef(false);
   // 回答を送っている間か。選択肢は押すとすぐ送るので、画面が切り替わる前に続けて押されても二重に送らない
   const answeringRef = useRef(false);
 
@@ -374,6 +389,7 @@ export function InterviewDemo({
       error: errorRef,
       image: imageRef,
       code: codeRef,
+      codeNotice: codeNoticeRef,
       excel: excelRef,
       term: termInputRef,
       steps: stepsRef,
@@ -386,7 +402,7 @@ export function InterviewDemo({
     // Excel の一覧の行から選んだとき、ことばの相談の欄へ移すとき、「次にすること」へ戻すときは、周りが見えたまま最小限だけ動かす。
     // 合言葉の欄は押したボタンのすぐ下に出るので、真ん中に置いて、押したボタンも見えたままにする
     const block =
-      focusTarget.target === "error" || focusTarget.target === "code"
+      focusTarget.target === "error" || focusTarget.target === "code" || focusTarget.target === "codeNotice"
         ? "center"
         : focusTarget.target === "excel" || focusTarget.target === "term" || focusTarget.target === "steps"
           ? "nearest"
@@ -439,14 +455,16 @@ export function InterviewDemo({
     requestFocus("error");
   }
 
-  // spot は合言葉の欄を出す場所（押したボタンの近く）
+  // spot は合言葉の欄を出す場所（押したボタンの近く）。
+  // retry は、合言葉を確かめたあとに自動で続ける操作。送る中身を利用者が書き直せない操作（サンプルで始める、
+  // 選んだ保存ファイルを読む）だけに渡す。書き直せる文を送る操作は、古い文を送らないよう、もう一度押してもらう
   async function failFrom(response: Response, retry?: () => void, spot: CodeSpot = "other") {
     const data = await response.json().catch(() => null);
     const message: string = data?.error ?? "処理に失敗しました。もう一度ボタンを押してください。";
-    // 合言葉がまだのときは、画面の上のエラーではなく、押したボタンのすぐ下に合言葉の欄と案内の文を出し、焦点を欄へ移す。
-    // 確かめたら止まった操作を続ける
+    // 合言葉がまだのときは、画面の上のエラーではなく、押したボタンのすぐ下に合言葉の欄と案内の文を出し、焦点を欄へ移す
     if (response.status === 401) {
       setError("");
+      setCodeNotice(null);
       retryRef.current = retry ?? null;
       setCodeMessage({ text: message, wrong: false });
       setCodeAt(spot);
@@ -457,7 +475,7 @@ export function InterviewDemo({
   }
 
   function postJson(path: string, body: BodyInit) {
-    setCodeNotice("");
+    setCodeNotice(null);
     return fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -505,7 +523,8 @@ export function InterviewDemo({
     try {
       const response = await postJson("/api/interview", JSON.stringify(body));
       if (!response.ok || !response.body) {
-        await failFrom(response, () => void sendInterview(body, spot), spot);
+        // サンプルで始めるときだけ自動で続ける（送る中身が決まっている）。回答や Excel の選択は、もう一度押してもらう
+        await failFrom(response, spot === "sample" ? () => void sendInterview(body, spot) : undefined, spot);
         failed = true;
         return false;
       }
@@ -789,7 +808,7 @@ export function InterviewDemo({
     try {
       const response = await postJson("/api/ask-term", JSON.stringify({ session, question: termInput }));
       if (!response.ok) {
-        await failFrom(response, () => void sendTerm(true));
+        await failFrom(response);
         return;
       }
       const data = await response.json();
@@ -872,7 +891,7 @@ export function InterviewDemo({
         JSON.stringify({ session, image: { media_type: "image/jpeg", data: preparedImage.data } }),
       );
       if (!response.ok) {
-        await failFrom(response, () => void sendImage());
+        await failFrom(response);
         return;
       }
       const data = await response.json();
@@ -903,43 +922,55 @@ export function InterviewDemo({
 
   async function submitCode(event: FormEvent) {
     event.preventDefault();
+    // 返事を待つ間に続けて押されても、2回目は送らない（1回目で続きを始めたあとに、違う案内が出ないように）
+    if (codeSendingRef.current) return;
+    codeSendingRef.current = true;
     setError("");
-    // 違っていたときも、欄は同じ場所に残し、止まった操作も覚えたままにする（正しい合言葉で続けられるように）
-    let response: Response;
+    // 同じ「違います」が続いても読み上げられるよう、いったん空にしてから入れる
+    setLive("");
     try {
-      response = await fetch("/api/access", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      });
-    } catch {
-      setCodeMessage({ text: CONNECTION_ERROR, wrong: true });
-      setLive(CONNECTION_ERROR);
-      requestFocus("code");
-      return;
-    }
-    if (!response.ok) {
-      const data = await response.json().catch(() => null);
-      const text: string = data?.error ?? "合言葉を確かめられませんでした。もう一度「確かめる」を押してください。";
-      setCodeMessage({ text, wrong: true });
-      // 焦点は欄にあるままなので、変わった文を読み上げ用の領域にも入れる
-      setLive(text);
-      requestFocus("code");
-      return;
-    }
-    setCodeAt(null);
-    setCodeMessage({ text: "", wrong: false });
-    setCode("");
-    const retry = retryRef.current;
-    retryRef.current = null;
-    if (retry) {
-      setLive("合言葉を確かめました。続きを進めます。");
-      retry();
-    } else {
-      const text = "合言葉を確かめました。最初に押したボタンを、もう一度押してください。";
-      setCodeNotice(text);
-      setLive(text);
+      // 違っていたときも、欄は同じ場所に残し、止まった操作も覚えたままにする（正しい合言葉で続けられるように）
+      let response: Response;
+      try {
+        response = await fetch("/api/access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code }),
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+      } catch {
+        setCodeMessage({ text: CONNECTION_ERROR, wrong: true });
+        setLive(CONNECTION_ERROR);
+        requestFocus("code");
+        return;
+      }
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const text: string = data?.error ?? "合言葉を確かめられませんでした。もう一度「合言葉を確かめる」を押してください。";
+        setCodeMessage({ text, wrong: true });
+        // 焦点は欄にあるままなので、変わった文を読み上げ用の領域にも入れる
+        setLive(text);
+        requestFocus("code");
+        return;
+      }
+      const spot = codeAt ?? "other";
+      setCodeAt(null);
+      setCodeMessage({ text: "", wrong: false });
+      setCode("");
+      const retry = retryRef.current;
+      retryRef.current = null;
+      if (retry) {
+        setLive("合言葉を確かめました。続きを進めます。");
+        retry();
+      } else {
+        // 書き直せる文（回答、返事、ことばの相談、写真、Excel の選択）は、合言葉を待つ間に直したかもしれないので、
+        // 自動では送らない。欄があった場所に案内を出し、焦点を移す（欄が消えて焦点が迷子にならないように）
+        const text = "合言葉を確かめました。先ほど押したボタンを、もう一度押してください。";
+        setCodeNotice({ text, at: spot });
+        requestFocus("codeNotice");
+      }
+    } finally {
+      codeSendingRef.current = false;
     }
   }
 
@@ -959,7 +990,7 @@ export function InterviewDemo({
     try {
       const response = await postJson("/api/verify-reply", JSON.stringify({ session, reply }));
       if (!response.ok) {
-        await failFrom(response, () => void sendReply(true), "reply");
+        await failFrom(response, undefined, "reply");
         return;
       }
       const data = await response.json();
@@ -1033,6 +1064,7 @@ export function InterviewDemo({
       aria-label="合言葉の確認"
       className="flex flex-col gap-2 rounded-8 border-2 border-blue-900 bg-white p-4"
     >
+      <p className="text-std-16N-170 text-solid-gray-800">このアプリは、いまは合言葉を知っている方だけが使えます。</p>
       <p
         id="access-code-message"
         className={`text-std-16B-170 ${codeMessage.wrong ? "text-error-1" : "text-solid-gray-900"}`}
@@ -1053,9 +1085,20 @@ export function InterviewDemo({
         className={fieldClass}
       />
       <button type="submit" disabled={!code} className={buttonClass}>
-        確かめる
+        合言葉を確かめる
       </button>
     </form>
+  );
+
+  // 合言葉を確かめたあとの案内（自動で続けない操作のとき）。欄があった場所に出し、焦点を移す
+  const codeNoticeView = (
+    <p
+      ref={codeNoticeRef}
+      tabIndex={-1}
+      className="rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4 text-std-16B-170 text-blue-900 focus-visible:focus-ring"
+    >
+      {codeNotice?.text}
+    </p>
   );
 
   return (
@@ -1094,11 +1137,8 @@ export function InterviewDemo({
           {live}
         </p>
 
-        {codeNotice && (
-          <p className="rounded-8 border-l-4 border-blue-900 bg-blue-50 p-4 text-std-16B-170 text-blue-900">{codeNotice}</p>
-        )}
-
         {codeAt === "other" && codeForm}
+        {codeNotice?.at === "other" && codeNoticeView}
 
         {!session && !busy && (
           <div className="flex flex-col gap-6">
@@ -1170,6 +1210,7 @@ export function InterviewDemo({
                   サンプルで試す
                 </button>
                 {codeAt === "sample" && codeForm}
+                {codeNotice?.at === "sample" && codeNoticeView}
                 <p className="text-std-16N-170">
                   {SAMPLE_HOSPITAL.name}の担当者になったつもりで、質問に答えてみてください。
                   {sampleDescription(item)}
@@ -1331,6 +1372,7 @@ export function InterviewDemo({
                       この回答で問診を始める
                     </button>
                     {codeAt === "excel" && codeForm}
+                    {codeNotice?.at === "excel" && codeNoticeView}
                   </div>
                 )}
               </section>
@@ -1347,6 +1389,7 @@ export function InterviewDemo({
                   <input type="file" accept="application/json,.json" onChange={loadResult} className="sr-only" />
                 </label>
                 {codeAt === "resume" && codeForm}
+                {codeNotice?.at === "resume" && codeNoticeView}
               </section>
             </section>
             {/* 使い方の流れは、始め方のあとに置く。始め方を最初の画面に入れるため（前置きは読まれにくい）。くわしい説明はたたむ */}
@@ -1370,8 +1413,8 @@ export function InterviewDemo({
               <details>
                 <summary className="cursor-pointer text-blue-900 underline focus-visible:focus-ring">くわしい流れを見る</summary>
                 <ol className="mt-2 flex list-decimal flex-col gap-1 pl-6 text-std-16N-170">
-                  <li>確かめる対策を1つ選びます（上の 1）。初めてなら、そのままで構いません</li>
-                  <li>始め方を1つ選びます（上の 2）。まず試すだけなら「サンプルで試す」です</li>
+                  <li>確かめる対策を1つ選びます（上の「1. 確かめる対策を選ぶ」）。初めてなら、そのままで構いません</li>
+                  <li>始め方を1つ選びます（上の「2. 始め方を1つ選ぶ」）。まず試すだけなら「サンプルで試す」です</li>
                   <li>質問に答えます（5問まで）。答えるたびに、判定カードが変わります</li>
                   <li>問診のまとめと、診療が止まるおそれがあるところ、次にすることを見ます。説明用の1枚を印刷できます</li>
                   <li>質問文をコピーして、メールなどでベンダーに送ります。「続きを再開するためのファイル」も保存します</li>
@@ -1437,7 +1480,8 @@ export function InterviewDemo({
             </p>
             {/* 選択肢は、押したらその文をそのまま回答として送る（押せば動くと思われるため）。
                 選択肢にない答えや付け足しは、下の欄と「回答する」で送れる。押し間違えは、次の回答で言い直せる
-                （あとの回答で report_viewpoint が同じ観点の状態を上書きできるため） */}
+                （あとの回答で report_viewpoint が同じ観点の状態を上書きできるため）。最後の質問のあとは言い直せないので、そう案内する。
+                欄に書きかけの文があるときは、選択肢で上書きして消さないよう、選択肢を押せなくする */}
             {question.options.length > 0 && (
               <>
                 <p id="options-note" className="text-std-16B-170 text-solid-gray-900">
@@ -1449,15 +1493,23 @@ export function InterviewDemo({
                       key={option}
                       type="button"
                       onClick={() => sendOption(option)}
-                      disabled={termBusy || imageBusy}
-                      className={secondaryClass}
+                      disabled={termBusy || imageBusy || answer.trim() !== ""}
+                      className={`${secondaryClass} py-2`}
                     >
                       {option}
                     </button>
                   ))}
                 </div>
+                {answer.trim() !== "" && (
+                  <p className="text-std-16N-170 text-solid-gray-900">
+                    下の欄に文があるときは、選択肢は押せません（書いた文が消えないように）。欄の文を「回答する」で送ってください。
+                  </p>
+                )}
                 <p className="text-std-16N-170 text-solid-gray-800">
-                  選択肢にない答えや、付け足したいことは、下の欄に書いて「回答する」を押してください。押し間違えたときは、次の回答の欄に「さっきの答えは違います」と、正しい答えを書いて送ってください。AI が読み直します。
+                  選択肢にない答えや、付け足したいことは、下の欄に書いて「回答する」を押してください。
+                </p>
+                <p className="text-std-16N-170 text-solid-gray-800">
+                  押し間違えたときは、次の質問の回答欄に「さっきの答えは違います。正しくは…」と書いて送ってください。最後の質問だったときは、問診のまとめで確かめ、違っていれば画面を読み込み直して、最初からやり直してください。
                 </p>
               </>
             )}
@@ -1834,7 +1886,7 @@ export function InterviewDemo({
               <div className="flex flex-col gap-2">
                 <h3 className="text-std-20B-150 text-solid-gray-900">1. ベンダーに質問文を送る</h3>
                 <p className="text-std-16N-170">
-                  次の文章を、メールなどでそのままベンダーへ送ってください。点線の下線がある言葉は、押すと短い説明が出ます（コピーする文には入りません）。
+                  次の文章を、メールなどでそのままベンダーへ送ってください。点線の下線がある言葉は、押すと短い説明が出ます。説明は、コピーする文には入りません。
                 </p>
                 {/* 質問文と引用の中の用語にも、ほかと同じ点線の下線の説明を付ける。コピーのボタンは元の文字列を写すので、説明は混ざらない */}
                 <p className="whitespace-pre-wrap rounded-8 bg-solid-gray-50 p-4 text-std-16N-170">
@@ -1904,6 +1956,7 @@ export function InterviewDemo({
             )}
             {/* form の中に form は置けないので、返事の欄の form のすぐ外（「返事を確かめる」の直後）に出す */}
             {vendor && codeAt === "reply" && codeForm}
+            {vendor && codeNotice?.at === "reply" && codeNoticeView}
 
             {results.length > 0 && (
               <div className="flex flex-col gap-3">

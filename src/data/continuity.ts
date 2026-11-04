@@ -39,7 +39,7 @@ export const CONTINUITY_ITEM = {
     {
       id: "plan",
       name: "攻撃を想定した計画",
-      label: "止まったときの計画を作る",
+      label: "システムが止まる時の計画を作る",
       goal: "攻撃でシステムが止まったときに、どの診療をどう続けるかが計画として決まっている",
       evidence: {
         id: "ev_continuity_plan",
@@ -57,7 +57,7 @@ export const CONTINUITY_ITEM = {
     {
       id: "contacts",
       name: "連絡の流れ",
-      label: "連絡の順番を図にする",
+      label: "連絡先と順番を図にする",
       goal: "攻撃に気づいたとき、院内と外部（ベンダー、厚生労働省、警察など）への連絡先と順番が図になっている",
       evidence: {
         id: "ev_continuity_contacts",

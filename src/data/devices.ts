@@ -63,7 +63,7 @@ export const DEVICES_ITEM = {
     {
       id: "source_limit",
       name: "つなげる相手の制限",
-      label: "つなげる機器を限る",
+      label: "ネットワークにつなぐ機器を限る",
       goal: "ネットワークにつなげる機器や相手を、決まったものだけに限っている",
       evidence: {
         id: "ev_devices_source_limit",

@@ -28,7 +28,7 @@ export default function Home() {
         noticeLead={
           <p className="text-std-16N-170 text-solid-gray-800">
             <strong className="text-std-16B-170 text-solid-gray-900">患者さんの情報は入力しないでください。</strong>
-            対策が基準を満たしていると保証するものではなく、法的な判断もしません。厚生労働省の公式ツールではありません。黒戸（くろうど）記念病院と黒戸町は架空です。
+            回答は、処理のため AI（Anthropic 社の Claude）へ送ります。確かめるのは、診療が止まる原因になりやすい重点項目5つだけです。対策が基準を満たしていると保証するものではなく、法的な判断もしません。厚生労働省の公式ツールではありません。黒戸（くろうど）記念病院と黒戸町は架空です。
           </p>
         }
         notice={

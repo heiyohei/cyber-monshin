@@ -65,7 +65,7 @@ export const BACKUP_ITEM = {
     {
       id: "isolate",
       name: "切り離し",
-      label: "バックアップを分けて保管する",
+      label: "バックアップを外して保管する",
       goal: "控えが攻撃の届かない場所に分けて保管されている",
       evidence: {
         id: "ev_backup_isolate",

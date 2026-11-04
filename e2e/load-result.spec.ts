@@ -68,7 +68,7 @@ test("保存ファイルの読み込み：結果の画面が固定データか�
   await expect(sheet.getByRole("heading", { name: "サイバー対策の点検結果（バックアップと復旧）" })).toBeVisible();
   await expect(sheet.getByRole("heading", { name: "判定：はい（書類上だけ）" })).toBeVisible();
   await expect(sheet).toContainText(
-    `確かめたこと：${LABEL.acquire}　回答で確認／${LABEL.restore}　わからない／${LABEL.isolate}　できていない／${LABEL.procedure}　回答で確認`,
+    `確かめたこと：${LABEL.acquire}：回答で確認／${LABEL.restore}：わからない／${LABEL.isolate}：できていない／${LABEL.procedure}：回答で確認`,
   );
   await expect(sheet.getByRole("heading", { name: "このままだと診療が止まるおそれがあるところ" })).toBeVisible();
   await expect(sheet).toContainText("実地の確認ではありません。");
