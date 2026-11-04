@@ -1,6 +1,6 @@
 // 問診の待ち時間を区間ごとに測る。費用がかかる（1回の問診で約 $0.05）。
-// 使い方：npm run eval:perf -- [--runs 3] [--rounds 4] [--item backup] [--fast]
-// --fast は fast mode（研究段階の機能。料金は2倍）で同じ流れを測る
+// 使い方：npm run eval:perf -- [--runs 3] [--rounds 4] [--item backup] [--fast] [--model claude-sonnet-5-5]
+// --fast は fast mode（研究段階の機能。料金は2倍）で同じ流れを測る。--model は別のモデルで速さだけを測る（質は npm run eval で比べる）
 // 区間：応答の始まりまで（通信と入力の読み込み）、考える時間（最初の出力のブロックまで）、書く時間（最後まで）、コードの処理
 import { parseArgs } from "node:util";
 import { client, emptyUsage } from "../src/lib/claude.ts";
@@ -8,7 +8,6 @@ import { runInterview, type InterviewEvent } from "../src/lib/interview.ts";
 import { createSession } from "../src/lib/session.ts";
 import { findItem } from "../src/data/items.ts";
 
-const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
 type Call = {
   round: number;
@@ -28,8 +27,14 @@ const { values } = parseArgs({
     rounds: { type: "string", default: "4" },
     item: { type: "string", default: "backup" },
     fast: { type: "boolean", default: false },
+    model: { type: "string" },
   },
 });
+
+// 100万トークンあたりの単価（キャッシュの書き込みは入力の1.25倍）
+const PRICE = values.model?.includes("sonnet")
+  ? { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }
+  : { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
 const calls: Call[] = [];
 let currentRound = 0;
@@ -37,9 +42,10 @@ let currentRound = 0;
 // 呼び出しの流れの出来事に時刻を付ける。中身（回答や質問の文）は記録しない
 const original = client.beta.messages.stream.bind(client.beta.messages);
 client.beta.messages.stream = ((params: Parameters<typeof original>[0], options?: Parameters<typeof original>[1]) => {
+  const model = values.model ? { ...params, model: values.model } : params;
   const request = values.fast
-    ? { ...params, speed: "fast", betas: [...(params.betas ?? []), "fast-mode-2026-02-01"] }
-    : params;
+    ? { ...model, speed: "fast", betas: [...(model.betas ?? []), "fast-mode-2026-02-01"] }
+    : model;
   const stream = original(request as typeof params, options);
   const t0 = performance.now();
   let started = 0;
