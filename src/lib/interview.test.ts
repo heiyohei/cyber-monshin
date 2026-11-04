@@ -198,6 +198,21 @@ for (const item of ITEMS) {
   });
 }
 
+// 選択肢は押すとすぐ送るので、押し間違えたときは次の回答で言い直してもらう（画面の案内）。
+// そのとき、あとの回答から同じ観点を報告し直せば、状態は上書きされ、判定も計算し直される
+test("記録：あとの回答から同じ観点を報告し直すと、状態を上書きする（押し間違えの言い直し）", () => {
+  const { session, events, emit } = setup();
+  session.answerCount = 1;
+  processToolUses([report("acquire", "denied", ["a1"])], session, emit);
+  assert.equal(session.states.acquire, "denied");
+  session.answerCount = 2;
+  const [result] = processToolUses([report("acquire", "confirmed", ["a2"])], session, emit);
+  assert.equal(result.is_error, undefined);
+  assert.equal(session.states.acquire, "confirmed");
+  const last = events.filter((event) => event.type === "viewpoint_updated").at(-1);
+  assert.equal(last?.type === "viewpoint_updated" && last.status, "confirmed");
+});
+
 test("検証エラーが続いたら、その観点を「わからない」にして止める", () => {
   const { session, events, emit } = setup();
   session.states.acquire = "confirmed";

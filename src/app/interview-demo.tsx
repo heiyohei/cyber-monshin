@@ -183,6 +183,12 @@ function EvidenceText({ evidence, onAskMore }: { evidence: Evidence; onAskMore?:
   );
 }
 
+// 送った回答の頭の部分。長い回答は30文字で切り、改行は空白にする
+function sentPreview(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > 30 ? `${flat.slice(0, 30)}…` : flat;
+}
+
 function checkItemNumbers(item: { checkItems: readonly { no: string }[] }): string {
   return item.checkItems.map((checkItem) => checkItem.no).join("、");
 }
@@ -349,8 +355,8 @@ export function InterviewDemo({
   // 合言葉で止まった操作。確かめたあとに、同じ操作を続ける（同じボタンを2回押さなくて済むように）
   const retryRef = useRef<(() => void) | null>(null);
   const [codeNotice, setCodeNotice] = useState("");
-  // 選択肢を押すと回答欄に入るだけで、まだ送られていない。そのことを文で示す（事務職員役の試用で迷った点）
-  const [optionNote, setOptionNote] = useState(false);
+  // 回答を送っている間か。選択肢は押すとすぐ送るので、画面が切り替わる前に続けて押されても二重に送らない
+  const answeringRef = useRef(false);
 
   function requestFocus(target: FocusTarget) {
     // 同じ先に続けて移すときも効くよう、番号を進める
@@ -395,7 +401,6 @@ export function InterviewDemo({
       setPreparedImage(null);
       setImageReading(null);
       setImageNotice(null);
-      setOptionNote(false);
       requestFocus("question");
     }
     if (event.type === "message") setNote(event.text);
@@ -485,9 +490,11 @@ export function InterviewDemo({
     setRecent([]);
     setVerdictChange(null);
     setBusy(true);
+    // 回答のときは、何を送ったかを最初に示す（選択肢は押すとすぐ送るので、押した答えが送られたことが分かるように）。
+    // この文は読み上げ用の領域（aria-live）にも出る
     setBusyMessage(
       body.answer
-        ? "回答を読み取っています。10〜20秒ほどかかります…"
+        ? `「${sentPreview(body.answer)}」を送りました。回答を読み取っています。10〜20秒ほどかかります…`
         : body.item_id
           ? "最初の質問を用意しています。10秒ほどかかります…"
           : "続きを確かめています…",
@@ -738,16 +745,27 @@ export function InterviewDemo({
     return true;
   }
 
-  async function sendAnswer(checked: boolean) {
-    // 注意の欄の「このまま送る」からも来るので、写真やことばの相談の応答を待っている間は送らない
-    if (termBusy || imageBusy) return;
-    if (!checked && needsPersonalInfoCheck(answer, "answer")) return;
+  // text は送る回答。選択肢を押したときはその文、それ以外は回答欄の文
+  async function sendAnswer(checked: boolean, text: string = answer) {
+    // 注意の欄の「このまま送る」からも来るので、写真やことばの相談の応答を待っている間は送らない。
+    // 選択肢を続けて押しても、送っている間は2回目を送らない（画面が切り替わる前の押し直しを防ぐ）
+    if (termBusy || imageBusy || answeringRef.current) return;
+    if (!checked && needsPersonalInfoCheck(text, "answer")) return;
     setWarning(null);
-    const sent = await sendInterview({ session, answer });
-    if (sent) {
-      setAnswer("");
-      setOptionNote(false);
+    answeringRef.current = true;
+    try {
+      const sent = await sendInterview({ session, answer: text });
+      if (sent) setAnswer("");
+    } finally {
+      answeringRef.current = false;
     }
+  }
+
+  // 選択肢は、押したらその文をそのまま回答として送る。注意の欄が出たとき（「このまま送る」）や、
+  // 送れなかったときにやり直せるよう、回答欄にも同じ文を入れておく
+  function sendOption(option: string) {
+    setAnswer(option);
+    void sendAnswer(false, option);
   }
 
   async function submitAnswer(event: FormEvent) {
@@ -1417,24 +1435,31 @@ export function InterviewDemo({
             <p className="rounded-8 bg-blue-50 p-4 text-std-16N-170 text-solid-gray-800">
               <TermText prefix="なぜこの質問？ " text={question.why} onAskMore={askMore} />
             </p>
+            {/* 選択肢は、押したらその文をそのまま回答として送る（押せば動くと思われるため）。
+                選択肢にない答えや付け足しは、下の欄と「回答する」で送れる。押し間違えは、次の回答で言い直せる
+                （あとの回答で report_viewpoint が同じ観点の状態を上書きできるため） */}
             {question.options.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {question.options.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => {
-                      setAnswer(option);
-                      setOptionNote(true);
-                      setLive("選択肢を回答欄に入れました。そのまま送るなら「回答する」を押してください。");
-                      answerRef.current?.focus();
-                    }}
-                    className="min-h-11 rounded-8 border border-blue-900 bg-white px-4 text-oln-16N-100 text-blue-900 hover:bg-blue-50 hover:underline focus-visible:focus-ring"
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
+              <>
+                <p id="options-note" className="text-std-16B-170 text-solid-gray-900">
+                  答えを選ぶと、すぐに送ります。
+                </p>
+                <div role="group" aria-labelledby="options-note" className="flex flex-wrap gap-2">
+                  {question.options.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => sendOption(option)}
+                      disabled={termBusy || imageBusy}
+                      className={secondaryClass}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-std-16N-170 text-solid-gray-800">
+                  選択肢にない答えや、付け足したいことは、下の欄に書いて「回答する」を押してください。押し間違えたときは、次の回答の欄に「さっきの答えは違います」と、正しい答えを書いて送ってください。AI が読み直します。
+                </p>
+              </>
             )}
             {item.photoHints && (
               <details
@@ -1613,11 +1638,6 @@ export function InterviewDemo({
             />
             {warning?.target === "answer" && (
               <WarningBox warning={warning} onSendAnyway={sendAnyway} onRewrite={() => setWarning(null)} />
-            )}
-            {optionNote && (
-              <p className="text-std-16N-170 text-solid-gray-800">
-                選択肢を回答欄に入れました。まだ送っていません。そのまま送るなら「回答する」を押してください。付け足して書いてもかまいません。
-              </p>
             )}
             <SentContent label="回答" text={answer} />
             <button type="submit" disabled={!answer.trim() || termBusy || imageBusy} className={buttonClass}>

@@ -28,18 +28,16 @@ test.describe("@paid 実際の Claude を呼ぶ", () => {
     const form = page.locator("form").filter({ hasText: "なぜこの質問？" });
     await expect(form.getByRole("button", { name: "回答する" })).toBeDisabled();
 
-    // 選択肢を1つ押すと回答欄に入るだけで、まだ送られない。押した選択肢の文は、あとで履歴に残ることを確かめるのに使う。
-    // 質問の文の中の用語（点線の下線）もボタンなので、form の直下の div に並ぶ選択肢のボタンだけを取る
-    const options = form.locator(':scope > div > button[type="button"]');
+    // 選択肢を1つ押すと、その文をそのまま回答として送る。押した選択肢の文は、あとで履歴に残ることを確かめるのに使う。
+    // 質問の文の中の用語（点線の下線）もボタンなので、「すぐに送ります」の組の中の選択肢のボタンだけを取る
+    const options = form.getByRole("group", { name: "答えを選ぶと、すぐに送ります。" }).getByRole("button");
     await expect(options.first()).toBeVisible();
     const chosen = (await options.first().textContent()) ?? "";
     expect(chosen).not.toBe("");
     await options.first().click();
-    await expect(form.getByText("選択肢を回答欄に入れました。まだ送っていません。")).toBeVisible();
-    await expect(form.getByLabel(/^回答（/)).not.toHaveValue("");
 
-    // 「回答する」で送る。読み取りの間の案内が消えるまで待つ
-    await form.getByRole("button", { name: "回答する" }).click();
+    // 何を送ったかが出る。読み取りの間の案内が消えるまで待つ
+    await expect(page.getByText(`「${chosen}」を送りました。`)).toBeVisible();
     const busy = page.getByText("回答を読み取っています");
     await expect(busy).toBeVisible();
     await expect(busy).toBeHidden({ timeout: 120_000 });
