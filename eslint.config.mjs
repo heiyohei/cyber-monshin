@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // サブエージェントの worktree（中の .next などのビルド成果物を読まないように）と、デモ動画の出力
+    ".claude/worktrees/**",
+    "demo/out/**",
   ]),
 ]);
 
