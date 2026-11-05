@@ -1,6 +1,6 @@
 // デモ動画を無音で録る。Playwright の素の API（playwright/test ではない）で画面を操作し、
 // 動画（webm）、場面ごとの時刻（scenes.json、scenes.md）、要所の画像（shots/）を出力先に残す。
-// 実際の Claude を呼ぶので、1回の通しで費用がかかる（約 $0.15〜0.2）。
+// 実際の Claude を呼ぶので、1回の通しで費用がかかる（11/6 の試しの録画は、単価からの計算で約 $0.23）。
 //
 // 使い方（本番ビルドを手元で起こしてから。合言葉はシェルの環境変数で渡し、画面には映さない）：
 //   DEMO_ACCESS_CODE=… DEMO_XLSX=/絶対パス/架空の記入例_医療機関確認用.xlsx npm run demo:record
