@@ -16,7 +16,8 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "typecheck": "next typegen && tsc --noEmit",
     "eval:clerk": "node --experimental-strip-types --no-warnings --env-file-if-exists=.env eval/clerk.ts",
-    "eval:perf": "node --experimental-strip-types --no-warnings --env-file-if-exists=.env eval/perf.ts"
+    "eval:perf": "node --experimental-strip-types --no-warnings --env-file-if-exists=.env eval/perf.ts",
+    "demo:record": "node --experimental-strip-types --no-warnings scripts/demo/record.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",

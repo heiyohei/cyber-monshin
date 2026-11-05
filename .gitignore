@@ -175,3 +175,5 @@ docs/ideas-*.md
 .claude/worktrees/
 # e2e テストが失敗したときのスクリーンショットと動画
 e2e/results/
+# デモ動画の録画（scripts/demo/record.ts の出力。動画、画像、保存ファイル、サーバーのログ）
+demo/out/
