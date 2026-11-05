@@ -221,9 +221,9 @@ IT の専門家がいない病院でも、質問に答えていくと、「は�
 | コマンド | 内容 |
 | --- | --- |
 | `npm install` → `npm run dev` | インストールと、手元での起動 |
-| `npm test` | 判定、引用、署名、保存ファイル、Excel の読み取りなどの自動テスト。154件、約0.5秒（2026-11-06 時点） |
-| `npm run test:e2e` | ブラウザで画面を動かす e2e テスト（Claude を呼ばない組、24件）。`next dev` を自動で起こす（ポートは `E2E_PORT`、既定 3001。`npm run dev` を動かしたままなら `E2E_PORT=3000`）。Excel の読み込みは、手元の `samples/` に架空の記入例があるときだけ動く |
-| `npm run test:e2e:paid` | 上に、実際に Claude を呼ぶ組（問診の1問目と返事の読み解き、3件）を加えた全27件。1回 約 $0.1 |
+| `npm test` | 判定、引用、署名、保存ファイル、Excel の読み取りなどの自動テスト。164件、約0.5秒（2026-11-06 時点） |
+| `npm run test:e2e` | ブラウザで画面を動かす e2e テスト（Claude を呼ばない組、25件）。`next dev` を自動で起こす（ポートは `E2E_PORT`、既定 3001。`npm run dev` を動かしたままなら `E2E_PORT=3000`）。Excel の読み込みは、手元の `samples/` に架空の記入例があるときだけ動く |
+| `npm run test:e2e:paid` | 上に、実際に Claude を呼ぶ組（問診の1問目と返事の読み解き、3件）を加えた全28件。1回 約 $0.1 |
 | `npm run typecheck` / `npm run lint` / `npm run build` / `npm run check:safety` | 型チェック、lint、ビルド、公開リポジトリに入れてはいけないもの（API キー、公開しない名前など）がないかの確認 |
 | `npm run eval -- --note "変更内容"` | 問診の評価。`--model` でモデルを差し替えて比べられる。費用がかかる |
 | `npm run eval:perf` / `npm run eval:terms` | 問診の待ち時間を、Claude の呼び出しごとに区間に分けて測る ／ ことばの相談の確認。どちらも費用がかかる |
