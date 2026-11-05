@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { BACKUP_ITEM } from "../data/backup.ts";
 import { computeResult } from "./result.ts";
-import { buildSaveFile, SAVE_VERSION, sessionFromSaveFile } from "./save-file.ts";
+import { buildSaveFile, SAVE_VERSION, saveFileNameOf, sessionFromSaveFile } from "./save-file.ts";
 import { createSession, vendorRequestFor } from "./session.ts";
 import { computeVerdict } from "./verdict.ts";
 
@@ -82,6 +82,23 @@ test("保存と読み込み（版2）：「やった」印が固定データの 
 test("保存：印がなければ done は空の配列", () => {
   const file = buildSaveFile(finishedSession(), {}, "要約");
   assert.deepEqual(file.items[0].done, []);
+});
+
+// ファイルの名前の日付は日本時間。中の savedAt は UTC のまま（日本時間の 11/6 0:50 は UTC では 11/5 15:50）
+test("保存：ファイルの名前の日付は日本時間で、中の savedAt は UTC のまま", () => {
+  const file = buildSaveFile(finishedSession(), {}, "要約");
+  assert.match(file.savedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.match(saveFileNameOf(file), /^サイバー問診_続きを再開するためのファイル_\d{4}-\d{2}-\d{2}\.json$/);
+  assert.equal(
+    saveFileNameOf({ savedAt: "2026-11-05T15:50:00.000Z" }),
+    "サイバー問診_続きを再開するためのファイル_2026-11-06.json",
+  );
+  assert.equal(
+    saveFileNameOf({ savedAt: "2026-11-05T14:59:59.000Z" }),
+    "サイバー問診_続きを再開するためのファイル_2026-11-05.json",
+  );
+  // 日付が読めなければ日付を付けない（buildSaveFile が作るものでは起きない）
+  assert.equal(saveFileNameOf({ savedAt: "" }), "サイバー問診_続きを再開するためのファイル.json");
 });
 
 // 版1（印の仕組みの前に保存したファイル）は今までどおり読み込め、印は空として扱う

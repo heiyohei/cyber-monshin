@@ -24,7 +24,8 @@ import type { ReadResult } from "@/lib/quote";
 import type { ImageReading } from "@/lib/read-image";
 import { countSteps, firstStep, remainingSteps, stepsCountNote } from "@/lib/result";
 import { FETCH_TIMEOUT_MS, LONG_WAIT_SECONDS, LONG_WAIT_TEXT, WAIT_TEXTS } from "@/lib/wait";
-import { buildSaveFile } from "@/lib/save-file";
+import { tokyoDayLabelOf } from "@/lib/date";
+import { buildSaveFile, saveFileNameOf } from "@/lib/save-file";
 import type { InterviewSession, LastYearAnswer, SealedSession, VendorAnswer, VendorRequest } from "@/lib/session";
 
 type Question = { text: string; why: string; options: string[] };
@@ -758,7 +759,7 @@ export function InterviewDemo({
     const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `サイバー問診_続きを再開するためのファイル_${file.savedAt.slice(0, 10)}.json`;
+    link.download = saveFileNameOf(file);
     link.click();
     URL.revokeObjectURL(url);
     setSavedDone(done);
@@ -816,11 +817,10 @@ export function InterviewDemo({
       setHistory([]);
       // 前の問診の「いまの回答で更新」と、回答から抜き出した言葉を判定カードに残さない
       setRecent([]);
-      // 保存した日は表示にだけ使う。形式はサーバーで確かめ済みだが、日付が読めなければ出さない
-      const savedAt = new Date(String((JSON.parse(text) as { savedAt?: string }).savedAt ?? ""));
-      const when = Number.isNaN(savedAt.getTime())
-        ? "保存した結果"
-        : `${savedAt.getMonth() + 1}月${savedAt.getDate()}日に保存した結果`;
+      // 保存した日は表示にだけ使う。形式はサーバーで確かめ済みだが、日付が読めなければ出さない。
+      // 日付は日本時間（ファイル名と同じ関数）。ブラウザのタイムゾーンには頼らない
+      const savedDay = tokyoDayLabelOf(String((JSON.parse(text) as { savedAt?: string }).savedAt ?? ""));
+      const when = savedDay ? `${savedDay}に保存した結果` : "保存した結果";
       const next = data.vendor
         ? `${when}を読み込みました。ベンダーの返事を下に貼り付けてください。`
         : `${when}を読み込みました。ベンダーに聞くことはないので、返事を待つ必要はありません。`;

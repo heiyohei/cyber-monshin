@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getItem } from "../data/items.ts";
+import { tokyoDateStringOf } from "./date.ts";
 import { stepIdsOf } from "./result.ts";
 import { createSession, itemOf, type InterviewSession } from "./session.ts";
 
@@ -106,6 +107,13 @@ export function buildSaveFile(
       },
     ],
   };
+}
+
+// 手元に保存するときのファイルの名前。日付は日本時間（中の savedAt は UTC のまま）。
+// buildSaveFile が作った savedAt は必ず読めるが、万一読めなければ日付を付けない
+export function saveFileNameOf(file: Pick<SaveFile, "savedAt">): string {
+  const date = tokyoDateStringOf(file.savedAt);
+  return `サイバー問診_続きを再開するためのファイル${date ? `_${date}` : ""}.json`;
 }
 
 export type LoadedSaveFile = { session: InterviewSession; file: SaveFile; done: string[] };
