@@ -12,19 +12,24 @@
 //   DEMO_OUT        出力先（既定 demo/out/<日時>/）
 //   DEMO_FREE_ONLY=1 Claude を呼ばない場面だけを通す（入口、Excel、架空の保存ファイルの読み込み、保存、説明用の1枚）。
 //                   部品の取り方を直したときに、費用をかけずに確かめる
+//   DEMO_WARMUP=1   録画の前にサーバーを温める。録画とは別のコンテキストで「サンプルで試す」を押し、最初の質問が出るまで待って閉じる。
+//                   起動直後の1回目は最初の質問に 13秒かかった（2026-11-06 の録画。2回目以降は 2〜3秒）ので、本番の録画の前に使う。
+//                   Claude を1回呼ぶので費用がかかる（最初の質問の用意は、入力 約1,200、出力 約300、キャッシュ書き 約2,300 トークン。
+//                   fast mode の単価で 約 $0.04）
 //
 // 場面の順は docs/demo-script.md の台本に合わせる。画面の文は毎回少し変わるので、文を決め打ちせず、見出しや role で待つ。
 // 部品の取り方（role と name）は e2e/*.spec.ts と同じにする
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { chromium, type BrowserContext, type Locator, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 import { CASES } from "../../eval/cases.ts";
 
 const BASE_URL = process.env.DEMO_BASE_URL ?? "http://localhost:3102";
 const ACCESS_CODE = process.env.DEMO_ACCESS_CODE ?? "";
 const XLSX = process.env.DEMO_XLSX;
 const FREE_ONLY = process.env.DEMO_FREE_ONLY === "1";
+const WARMUP = process.env.DEMO_WARMUP === "1";
 const OUT = path.resolve(process.env.DEMO_OUT ?? path.join("demo", "out", stamp()));
 const SHOTS_DIR = path.join(OUT, "shots");
 // 動画と画面の大きさ（同じにする）
@@ -38,6 +43,8 @@ const FIXTURE = path.resolve("e2e/fixtures/saved-result-v1.json");
 const RESTORE_NEGATIVE = /戻(し|せ)[^、。]*(ない|いない|ありません)|確かめていない|試していない|したことがない/;
 // 選択肢になかったときに回答欄に入れる文
 const RESTORE_ANSWER = "バックアップは毎晩ベンダーの機械が取っています。戻す練習はしたことがありません。";
+// 「わからない」の意味の選択肢。戻す話の次の質問（ふつうは3問目、切り離し）で選ぶ
+const UNKNOWN_OPTION = /わからない|分からない|不明/;
 // 問診で答える回数の上限（ふつうは 2〜4問で終わる）
 const MAX_ANSWERS = 8;
 // ベンダーの返事：評価ケースの「偽の指示を含む返事」
@@ -126,14 +133,40 @@ async function grantAccess(context: BrowserContext): Promise<string> {
 
 // 問診の1問に、どう答えるか。1問目は選択肢の最初（取っている）。
 // そのあとは「戻したことがない」の意味の選択肢があれば選び、なければ、戻す話の質問か3問目で回答欄に文を入れる。
-// 戻す話を答えたあとは、選択肢の最初を選ぶ
-function decide(n: number, questionText: string, options: string[], restoreDone: boolean): { kind: "option" | "text"; text: string } {
-  if (options.length === 0) return { kind: "text", text: restoreDone ? "わかりません。" : RESTORE_ANSWER };
-  if (n === 1 || restoreDone) return { kind: "option", text: options[0] };
+// 戻す話を答えた次の質問（ふつうは3問目、切り離し）は「わからない」の意味の選択肢を選ぶ（なければ最初の選択肢）。
+// 止まる穴が「戻す確認」と「切り離し」の2件になり、次にすること（6件）と返事待ち（2件）が厚くなるため。
+// それより後は、選択肢の最初を選ぶ
+type Progress = { restoreDone: boolean; unknownDone: boolean };
+function decide(n: number, questionText: string, options: string[], progress: Progress): { kind: "option" | "text"; text: string } {
+  if (options.length === 0) return { kind: "text", text: progress.restoreDone ? "わかりません。" : RESTORE_ANSWER };
+  if (n === 1) return { kind: "option", text: options[0] };
+  if (progress.restoreDone) {
+    if (progress.unknownDone) return { kind: "option", text: options[0] };
+    return { kind: "option", text: options.find((option) => UNKNOWN_OPTION.test(option)) ?? options[0] };
+  }
   const negative = options.find((option) => RESTORE_NEGATIVE.test(option));
   if (negative) return { kind: "option", text: negative };
   if (/戻/.test(questionText) || n >= 3) return { kind: "text", text: RESTORE_ANSWER };
   return { kind: "option", text: options[0] };
+}
+
+// 録画の前にサーバーを温める（DEMO_WARMUP=1）。録画とは別のコンテキストなので動画には入らない。cookie は録画と同じ方法で付ける。
+// Claude を1回呼ぶ（費用の目安は冒頭のコメント）
+async function warmUp(browser: Browser): Promise<number> {
+  const context = await browser.newContext({ viewport: SIZE, locale: "ja-JP", timezoneId: "Asia/Tokyo" });
+  try {
+    await grantAccess(context);
+    const page = await context.newPage();
+    await page.goto(BASE_URL);
+    await page.getByRole("button", { name: "サンプルで試す" }).click();
+    const startedAt = Date.now();
+    await page.getByRole("heading", { name: /^質問に答える/ }).waitFor({ timeout: CLAUDE_TIMEOUT });
+    const ms = Date.now() - startedAt;
+    console.log(`[demo] 温め：最初の質問まで ${sec(ms)}`);
+    return ms;
+  } finally {
+    await context.close();
+  }
 }
 
 function verdictLabel(page: Page) {
@@ -164,6 +197,8 @@ async function sceneExcel(page: Page) {
   await page.getByLabel("Excel を読み込む").setInputFiles(XLSX);
   const table = page.getByRole("table", { name: "去年の回答の一覧（重点項目5つ）" });
   await table.waitFor();
+  // 一覧が出た直後に止めてから、一覧の先頭へ動かす
+  await pause(page, 1500);
   await show(table, "start");
   await pause(page, 3000);
   await shot(page, "excel-list");
@@ -186,7 +221,7 @@ async function sceneInterview(page: Page, startButton: Locator) {
   await startButton.click();
   await waiting("最初の質問を用意", () => questionHeading.waitFor({ timeout: CLAUDE_TIMEOUT }));
 
-  let restoreDone = false;
+  const progress: Progress = { restoreDone: false, unknownDone: false };
   let paperOnlyShown = false;
   for (let n = 1; n <= MAX_ANSWERS; n++) {
     if (await summaryHeading(page).isVisible()) break;
@@ -198,8 +233,10 @@ async function sceneInterview(page: Page, startButton: Locator) {
 
     const group = form.getByRole("group", { name: "答えを選ぶと、すぐに送ります。" });
     const options = (await group.count()) > 0 ? await group.getByRole("button").allTextContents() : [];
-    const choice = decide(n, questionText, options, restoreDone);
-    if (choice.text === RESTORE_ANSWER || RESTORE_NEGATIVE.test(choice.text)) restoreDone = true;
+    const choice = decide(n, questionText, options, progress);
+    // 戻す話を答えたあとの最初の質問（「わからない」を選ぶ番）が済んだら印を付け、そのあとで戻す話の印を付ける（順番を変えない）
+    if (progress.restoreDone) progress.unknownDone = true;
+    if (choice.text === RESTORE_ANSWER || RESTORE_NEGATIVE.test(choice.text)) progress.restoreDone = true;
     note(`${n}問目：${choice.kind === "option" ? "選択肢" : "回答欄"}「${choice.text}」`);
     if (choice.kind === "option") {
       const button = group.getByRole("button", { name: choice.text, exact: true });
@@ -297,7 +334,9 @@ async function sceneVendorQuestion(page: Page): Promise<string> {
   const savedPath = path.join(OUT, "saved-result.json");
   await download.saveAs(savedPath);
   note(`保存したファイル：${download.suggestedFilename()} → saved-result.json`);
-  await pause(page, 1500);
+  // 保存は画面に変化がないので、ボタンの下の「病院名と、これまでの質問と回答の文は入りません」の段落を見せる
+  await show(page.getByText(/^保存するファイルは、このアプリにもう一度読み込んで/));
+  await pause(page, 2500);
   return savedPath;
 }
 
@@ -345,6 +384,11 @@ async function sceneReply(page: Page, savedPath: string) {
 // 1枚は印刷用（A4、10pt）なので、1280 の幅では字が小さい。動画で読めるよう、紙の幅に近づけて大きく映す（中身は変えない）
 async function scenePrintSheet(page: Page) {
   scene(7, "説明用の1枚");
+  // 何の画面かが伝わるよう、切り替える前に「説明用の1枚を印刷する」のボタンに視線を置く（押さない。印刷ダイアログは出さない）
+  const printButton = page.getByRole("button", { name: "説明用の1枚を印刷する" });
+  await show(printButton);
+  await printButton.hover();
+  await pause(page, 1000);
   await page.emulateMedia({ media: "print" });
   await page.addStyleTag({ content: "#print-sheet { max-width: 920px; margin: 0 auto; zoom: 1.3; }" });
   const sheet = page.locator("#print-sheet");
@@ -370,7 +414,7 @@ async function sceneEnd(page: Page) {
   if (current) current.endMs = now();
 }
 
-function writeScenes(meta: { startedAt: string; videoStartMs: number; access: string; error?: string }) {
+function writeScenes(meta: { startedAt: string; videoStartMs: number; access: string; warmupMs: number | null; error?: string }) {
   const totalMs = scenes.at(-1)?.endMs ?? now();
   const waits = scenes.flatMap((item) => item.waits.map((wait) => ({ scene: item.no, ...wait })));
   const totalWaitMs = waits.reduce((sum, wait) => sum + (wait.endMs - wait.startMs), 0);
@@ -382,6 +426,7 @@ function writeScenes(meta: { startedAt: string; videoStartMs: number; access: st
     videoStartMs: meta.videoStartMs,
     access: meta.access,
     freeOnly: FREE_ONLY,
+    warmupMs: meta.warmupMs,
     totalMs,
     totalWaitMs,
     error: meta.error ?? null,
@@ -396,6 +441,7 @@ function writeScenes(meta: { startedAt: string; videoStartMs: number; access: st
     `- 時刻は、コンテキストを作った時刻を 0 とするミリ秒。ページを開いたのは +${meta.videoStartMs}ms`,
     `- Claude などを待った区間の合計：${sec(totalWaitMs)}（編集で縮める）`,
     `- 合言葉：${meta.access}`,
+    meta.warmupMs !== null ? `- 録画の前にサーバーを温めた（最初の質問まで ${sec(meta.warmupMs)}。動画には入らない）` : "",
     FREE_ONLY ? "- Claude を呼ばない通し（問診と返事の確認は飛ばした）" : "",
     meta.error ? `- 途中で止まった：${meta.error}` : "",
     "",
@@ -425,6 +471,10 @@ async function main() {
   mkdirSync(SHOTS_DIR, { recursive: true });
   console.log(`[demo] 出力先：${OUT}`);
   const browser = await chromium.launch();
+  // 温めは録画の前に済ませる（時刻の 0 は、このあとの録画のコンテキストを作った時刻）
+  let warmupMs: number | null = null;
+  if (WARMUP && FREE_ONLY) console.log("[demo] Claude を呼ばない通しなので、温めはしない");
+  else if (WARMUP) warmupMs = await warmUp(browser);
   t0 = Date.now();
   const startedAt = new Date(t0).toISOString();
   const context = await browser.newContext({
@@ -475,7 +525,7 @@ async function main() {
     await video.delete();
   }
   await browser.close();
-  writeScenes({ startedAt, videoStartMs, access, error });
+  writeScenes({ startedAt, videoStartMs, access, warmupMs, error });
   console.log(`[demo] 動画：${path.join(OUT, "demo.webm")}`);
   if (error) process.exit(1);
 }
