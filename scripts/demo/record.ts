@@ -202,6 +202,13 @@ async function sceneExcel(page: Page) {
   await show(table, "start");
   await pause(page, 3000);
   await shot(page, "excel-list");
+  // 「気になる点」の列の1つ（去年「いいえ」、ベンダーが「対象外」など）を指して止める。見つからなければ飛ばす
+  const concern = table.getByText(/去年の回答に「いいえ」|対象外|ベンダーの回答は「いいえ」/).first();
+  if (await concern.isVisible().catch(() => false)) {
+    await show(concern);
+    await concern.hover();
+    await pause(page, 1800);
+  }
   const rows = table.getByRole("row").filter({ has: page.getByRole("button", { name: /この対策を選ぶ/ }) });
   const chooseBackup = rows.getByRole("button", { name: /^この対策を選ぶ\s*（バックアップと復旧）$/ });
   await show(chooseBackup);
