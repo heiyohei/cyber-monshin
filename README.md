@@ -10,7 +10,7 @@ Built with Claude: Japan 2026 の提出作品です（テーマ2「本来、誰�
 
 診療や治療の内容は判断しません。患者さんの情報は入力しないでください。病院のシステムの備えを確かめるための道具です。
 
-公開 URL：https://cyber-monshin.vercel.app/ （検証中は、試すのに合言葉が必要です）
+公開 URL：https://cyber-monshin.vercel.app/ （デモ環境のため、限られたユーザーのみ利用できる状態になっています）
 
 デモ動画（約3分）：https://youtu.be/UspXiFCfszI
 
