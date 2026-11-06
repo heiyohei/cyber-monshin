@@ -177,3 +177,5 @@ docs/ideas-*.md
 e2e/results/
 # デモ動画の録画（scripts/demo/record.ts の出力。動画、画像、保存ファイル、サーバーのログ）
 demo/out/
+# macOS の Finder が作るファイル
+.DS_Store
